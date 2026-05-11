@@ -69,7 +69,7 @@ Use **pgvector in Supabase Postgres** for canonical product and query embeddings
 
 ### LLM Routing
 
-Use **OpenRouter** as the LLM gateway with the **OpenAI SDK 6.37.0** or **@openrouter/sdk 0.4.1**. OpenRouter provides an OpenAI-compatible API to many models and normalized schemas ([OpenRouter docs](https://openrouter.ai/docs/), [OpenRouter API overview](https://openrouter.ai/docs/api-reference/overview/)). For BasketGap, keep the decisions-log default: **openai/gpt-4o-mini** as the primary fallback model, with **google/gemini-2.5-flash-lite** and **anthropic/claude-3.5-haiku** or newer Haiku IDs as benchmarked fallbacks. The live OpenRouter model API also lists newer aliases/models such as `google/gemini-3.1-flash-lite`, `~google/gemini-flash-latest`, `anthropic/claude-haiku-4.5`, and `~anthropic/claude-haiku-latest`; do not use `latest` aliases in production without fixture regression tests.
+Use **OpenRouter** as the LLM gateway with the **OpenAI SDK 6.37.0** or **@openrouter/sdk 0.4.1**. OpenRouter provides an OpenAI-compatible API to many models and normalized schemas ([OpenRouter docs](https://openrouter.ai/docs/), [OpenRouter API overview](https://openrouter.ai/docs/api-reference/overview/)). For BasketGap v1, the recommendation is **Primary: `openai/gpt-4o-mini` via OpenRouter with the model ID pinned** and **Fallback: `google/gemini-2.0-flash-001` via OpenRouter with the model ID pinned**. Remove Claude Haiku from v1: it is too expensive and capability-heavy for fallback-only use, and should be revisited only if both GPT-4o mini and Gemini 2.0 Flash prove insufficient on real Australian shorthand. This matches the spec: matching is deterministic-first, the LLM only fires on roughly 10-15% of input lines, and cheap, fast structured-extraction models are the correct tool for that narrow fallback path. Do not use `latest` aliases in production without fixture regression tests.
 
 Avoid **LangChain 1.4.0** for the v1 matcher. It is useful for complex agent/RAG workflows, but the spec calls for a deterministic, debuggable pipeline with a small LLM fallback. Avoid self-hosted LiteLLM unless vendor control or cost accounting becomes a major issue. Footguns: gateway routing can hide provider outages and pricing changes; log model ID, provider, latency, token counts, confidence, and fallback reason without logging raw shopping lists.
 
@@ -190,3 +190,16 @@ Avoid camera, image picker, barcode scanner, media library, and OCR modules in v
 - **Mobile analytics can violate product tone/privacy if overused.** Track only operational/product events, not grocery content.
 - **Australia-specific App Store and Play Store compliance still needs review.** Price comparison claims, privacy labels, optional location permission wording, and consumer-law-sensitive phrasing should be reviewed before release.
 - **Supabase local/remote drift is common.** Require migrations, generated types, and CI checks before production data exists.
+
+## Top 10 Recommendations
+
+1. Use Node.js 24 LTS with pnpm 11 workspaces; keep Turborepo optional until CI caching matters.
+2. Start on Expo SDK 55, but re-check SDK 56 if the actual build starts later.
+3. Use plain React Native styling plus a tiny local design system for the Notes-app feel.
+4. Choose Expo Router over raw React Navigation for the app's shallow flows.
+5. Use TanStack Query for server state and Zustand only if local draft/navigation state needs it.
+6. Use Jest/jest-expo for mobile tests, Vitest for shared/API/workers, and Maestro for E2E smoke tests.
+7. Keep API handlers plain Vercel Node Functions at first; add Hono only when routing grows.
+8. Use Supabase Postgres + pgvector, with Drizzle for server-side SQL once schema complexity justifies it.
+9. Use OpenRouter with pinned model IDs: GPT-4o mini primary and Gemini 2.0 Flash fallback; keep Claude Haiku out of v1 unless real shorthand tests prove both cheaper models insufficient.
+10. Use GitHub Actions cron first for nightly refresh; add QStash later if targeted refresh fan-out needs durability.
