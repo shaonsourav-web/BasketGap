@@ -28,7 +28,14 @@ Apple changes App Review, privacy, age-rating, and SDK disclosure requirements r
 
 **What Apple requires:** Apps and third-party SDKs can include privacy manifest files named `PrivacyInfo.xcprivacy`. Apps must declare collected data and required-reason API use where applicable. Apple documents required-reason API declarations and sends warnings/rejections when required API use is not described ([Apple privacy manifests](https://developer.apple.com/documentation/bundleresources/privacy_manifest_files), [adding a privacy manifest](https://developer.apple.com/documentation/bundleresources/adding-a-privacy-manifest-to-your-app-or-third-party-sdk), [required reason API technote](https://developer.apple.com/documentation/technotes/tn3183-adding-required-reason-api-entries-to-your-privacy-manifest)).
 
-**How BasketGap will comply:** BasketGap should include an app-level `PrivacyInfo.xcprivacy` even if Expo/native dependencies include their own manifests. Expected declarations need review once dependencies are final, but likely categories include app functionality analytics/crash data and possibly user defaults/file timestamp APIs used by React Native/Expo/Sentry. No tracking domains should be declared unless a future SDK actually tracks users.
+**How BasketGap will comply:** BasketGap should include an app-level `PrivacyInfo.xcprivacy` even if Expo/native dependencies include their own manifests. Add these required-reason API declarations initially, then confirm them against the final dependency tree before submission:
+
+- `NSPrivacyAccessedAPICategoryUserDefaults` — reason code `CA92.1` (access information from the same app group/app).
+- `NSPrivacyAccessedAPICategoryFileTimestamp` — reason code `C617.1` (display files to the user).
+- `NSPrivacyAccessedAPICategoryDiskSpace` — reason code `85F4.1` (write/read to disk for app function).
+- `NSPrivacyAccessedAPICategorySystemBootTime` — reason code `35F9.1` (measure time to optimize app performance).
+
+No tracking domains should be declared unless a future SDK actually tracks users.
 
 **Build work needed:** Add `PrivacyInfo.xcprivacy` to the iOS target through Expo config/plugin support or native project files after prebuild. Audit every native dependency before submission with Xcode's privacy report. Confirm Sentry, PostHog, Supabase-related code, Expo modules, and React Native dependencies either provide manifests or are covered by the app manifest. Re-check required-reason API categories immediately before submission.
 
@@ -36,7 +43,7 @@ Apple changes App Review, privacy, age-rating, and SDK disclosure requirements r
 
 **What Apple requires:** ATT permission is required when an app collects end-user data and shares it with other companies for tracking across other companies' apps or websites, ad targeting/measurement, or sharing with data brokers ([Apple User Privacy and Data Use](https://developer.apple.com/app-store/user-privacy-and-data-use/), [ATT framework docs](https://developer.apple.com/documentation/AppTrackingTransparency)).
 
-**How BasketGap will comply:** v1 should not need ATT. BasketGap does not run ads, does not share data with data brokers, and should not track users across apps/websites. Device ID is for anonymous preference continuity and rate limiting, not cross-app tracking. Analytics must be configured without advertising identifiers, cross-app tracking, or data broker sharing.
+**How BasketGap will comply:** v1 should not need ATT. BasketGap does not run ads, does not share data with data brokers, and should not track users across apps/websites. Device ID is for anonymous preference continuity and rate limiting, not cross-app tracking. We do not share device IDs or any identifiers with third parties for advertising or measurement purposes. Sentry and PostHog (if used) are configured to disable advertising ID collection and cross-app tracking. Analytics must be configured without advertising identifiers, cross-app tracking, or data broker sharing.
 
 **Build work needed:** Do not add `NSUserTrackingUsageDescription` or ATT prompt unless a future SDK or business requirement introduces tracking. Disable ad ID collection in analytics SDKs. In App Store Connect privacy answers, do not mark data as "used for tracking" unless that changes.
 
@@ -92,9 +99,9 @@ Apple changes App Review, privacy, age-rating, and SDK disclosure requirements r
 
 **What Apple requires:** Apps must not misuse protected third-party material, create copycat confusion, or imply endorsement without rights. Apple's guidelines include copycat/IP restrictions and review can ask for documentary evidence for third-party content rights ([App Review Guidelines](https://developer.apple.com/appstore/resources/approval/guidelines.html)).
 
-**How BasketGap will comply:** The app name remains BasketGap, not "Coles vs Woolworths" or anything that suggests affiliation. Coles and Woolworths names should appear only descriptively inside the app and metadata. Do not use retailer logos, brand colors as primary identity, product images, screenshots from retailer sites, or official-looking badges unless permission is obtained. Include "BasketGap is independent and is not affiliated with, endorsed by, or sponsored by Coles Group or Woolworths Group" in About/Legal and review notes.
+**How BasketGap will comply:** The app name remains BasketGap, not "Coles vs Woolworths" or anything that suggests affiliation. Coles and Woolworths names should appear only descriptively inside the app and metadata. Do not use retailer logos, brand colors as primary identity, product images, screenshots from retailer sites, or official-looking badges unless permission is obtained. No product images sourced from retailer websites in v1 or v1.1. If product images are added later, only use officially licensed sources (e.g., GS1, manufacturer-provided images) or generic category placeholders. Include "BasketGap is independent and is not affiliated with, endorsed by, or sponsored by Coles Group or Woolworths Group" in About/Legal and review notes.
 
-**Build work needed:** Design original icon/branding. Use text labels for retailers initially. Add legal disclaimer to metadata/review notes. If product names/images come from retailer sources, confirm rights and terms before including images in the app.
+**Build work needed:** Design original icon/branding. Use text labels for retailers initially. Add legal disclaimer to metadata/review notes. Keep product imagery out of v1 and v1.1 unless licensed non-retailer image sources are approved.
 
 ### Comparison And Scraper-Style App Concerns
 
@@ -134,7 +141,16 @@ Apple changes App Review, privacy, age-rating, and SDK disclosure requirements r
 
 **Threat:** Anonymous usage can be abused for scraping BasketGap's normalized data, forcing LLM costs, or hammering targeted refresh.
 
-**Mitigation:** v1 uses anonymous device-ID-based throttling plus IP/user-agent heuristics and per-endpoint rate limits. Compare endpoint limits should separately cap request count, list length, line count, characters per line, total characters, LLM fallback invocations, and targeted refresh requests. Device ID must be signed or accompanied by server-issued anonymous session tokens to reduce trivial spoofing.
+**Mitigation:** v1 uses anonymous device-ID-based throttling plus IP/user-agent heuristics and per-endpoint rate limits. Initial values, to be tuned with real traffic:
+
+- Max compare requests per device ID per minute: 10.
+- Max compare requests per IP per minute: 60, with monitoring for higher legitimate usage.
+- Max list items per request: 50.
+- Max characters per line: 100.
+- Max LLM fallback invocations per device per day: 200.
+- Response when a limit is hit: HTTP 429 with a gentle in-app message; no permanent ban.
+
+Device ID must be signed or accompanied by server-issued anonymous session tokens to reduce trivial spoofing.
 
 **Enforced at:** API gateway/function middleware, database counters, optional Upstash/QStash/rate-limit store.
 
@@ -182,7 +198,7 @@ Apple changes App Review, privacy, age-rating, and SDK disclosure requirements r
 
 **Threat:** Logs often become the accidental database of sensitive user behavior.
 
-**Mitigation:** Never log full shopping lists, raw LLM prompts, raw postcodes tied to device IDs, service role keys, retailer tokens, or full provider responses. Log request IDs, coarse postcode region or hash where needed, line count, unmatched count, latency buckets, model ID, token counts, error class, and freshness age. Sentry breadcrumbs must redact request bodies.
+**Mitigation:** Never log full shopping lists, raw LLM prompts, raw postcodes tied to device IDs, service role keys, retailer tokens, or full provider responses. Log request IDs, coarse postcode region or hash where needed, line count, unmatched count, latency buckets, model ID, token counts, error class, and freshness age. Sentry breadcrumbs must redact request bodies. LLM provider request/response retention is disabled at the provider level where possible (OpenRouter retention settings, OpenAI API logging opt-outs). Where not possible, document the residual data flow in the privacy policy.
 
 **Enforced at:** API logger, worker logger, Sentry config, Vercel/Axiom log drains.
 
@@ -246,6 +262,7 @@ Apple changes App Review, privacy, age-rating, and SDK disclosure requirements r
 
 - [ ] Mobile binary contains no OpenRouter, Supabase service-role, retailer, Vercel, Sentry auth, or PostHog secret keys.
 - [ ] API validates list/postcode payloads with schema and size limits before parsing.
+- [ ] Manual security review of the compare endpoint completed. Focus: input validation, rate limit bypass, LLM cost amplification, device ID spoofing.
 - [ ] Compare endpoint has anonymous device/IP rate limits and LLM fallback budget limits.
 - [ ] LLM fallback uses pinned GPT-4o mini primary and Gemini 2.0 Flash fallback, strict structured output, and prompt-injection tests.
 - [ ] No full shopping lists, raw prompts, or postcode+device pairs are logged.
@@ -260,4 +277,3 @@ Apple changes App Review, privacy, age-rating, and SDK disclosure requirements r
 - [ ] Dependabot/security scanning is enabled and CI passes without secrets exposed to untrusted PRs.
 - [ ] Supabase backup/restore has been tested.
 - [ ] Incident response contact and runbook exist before public launch.
-

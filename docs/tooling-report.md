@@ -17,7 +17,7 @@ Use **Turborepo 2.9.12 only if task orchestration becomes useful**, not as a day
 
 ### Mobile: React Native And Expo
 
-Use **Expo SDK 55.0.x** with **React Native 0.83** and **React 19.2**. Expo SDK 55 is the current stable Expo SDK, released February 25, 2026, and maps to RN 0.83/React 19.2 ([Expo SDK 55](https://expo.dev/sdk/55), [Expo SDK reference](https://docs.expo.dev/versions/v55.0.0)). This is the right production default because the project needs iOS first, later Android, no custom native app logic yet, and EAS Build/Submit will matter quickly. Alternatives: bare React Native 0.85 is newer but not the stable Expo path; Flutter would be a stack change; native Swift/Kotlin would slow the first guest-first MVP. Footguns: SDK 55 dropped Legacy Architecture support, Expo Go had a transition lag for SDK 55, and SDK 56 is imminent, so build with development builds rather than relying on Expo Go ([SDK 55 changelog](https://expo.dev/changelog/sdk-55)).
+Use **Expo SDK 55.0.x** with **React Native 0.83** and **React 19.2.0**. Expo SDK 55 is the current stable Expo SDK, released February 25, 2026, and maps to RN 0.83/React 19.2.0 ([Expo SDK 55](https://expo.dev/sdk/55), [Expo SDK reference](https://docs.expo.dev/versions/v55.0.0)). This is the right production default because the project needs iOS first, later Android, no custom native app logic yet, and EAS Build/Submit will matter quickly. Alternatives: bare React Native 0.85 is newer but not the stable Expo path; Flutter would be a stack change; native Swift/Kotlin would slow the first guest-first MVP. Footguns: SDK 55 dropped Legacy Architecture support, Expo Go had a transition lag for SDK 55, and SDK 56 is imminent, so build with development builds rather than relying on Expo Go ([SDK 55 changelog](https://expo.dev/changelog/sdk-55)).
 
 Use **Expo Router 55.0.14** for navigation. BasketGap's flows are shallow but will still need typed routes for compare results, unmatched item review, settings, and later restore/sign-in. Expo Router is the Expo-native default and reduces React Navigation boilerplate. Alternative: direct **React Navigation 7.2.4** gives more manual control and is still the underlying ecosystem, but it adds unnecessary setup for this app. Footgun: file-system routes can become messy; keep route groups small and domain-free.
 
@@ -53,7 +53,7 @@ Use **Vitest 4.1.5** for shared, API, and worker unit tests. It is fast and fits
 
 Use **Vercel Functions on the Node.js runtime** with **Vercel CLI 53.3.2** and **@vercel/node 5.7.17**. The API should start as plain request handlers with explicit JSON validation. Vercel supports TypeScript/JavaScript functions in an `api` directory on the Node runtime ([Vercel Node runtime](https://vercel.com/docs/functions/runtimes/node-js/)). Alternatives: Next.js route handlers add app framework weight the project does not need; Edge Functions may be too constrained for Supabase/LLM calls; a long-running server is premature. Footgun: serverless timeouts and cold starts are real; compare requests must stay under the spec's under-2-second target by batching deterministic matching and using LLM fallback rarely.
 
-Use **Hono 4.12.18** if routing grows beyond a couple of handlers. Hono gives a small, typed request layer without committing to tRPC or Next.js. Alternative: plain Vercel handlers are best at the start; tRPC is nice for web apps but less useful across a mobile app/API boundary where explicit JSON contracts are valuable. Footgun: do not let framework abstractions hide status codes and privacy behavior.
+Use **Hono 4.12.18** if routing grows beyond a couple of handlers. Adopt Hono once the API exceeds 6 endpoints or requires typed middleware. Hono gives a small, typed request layer without committing to tRPC or Next.js. Alternative: plain Vercel handlers are best at the start; tRPC is nice for web apps but less useful across a mobile app/API boundary where explicit JSON contracts are valuable. Footgun: do not let framework abstractions hide status codes and privacy behavior.
 
 Use schema validation with **Zod** once implementation starts, even though it is not one of the listed minimum tools. Request validation is non-negotiable because the mobile app is untrusted and all sensitive logic stays server-side.
 
@@ -69,7 +69,7 @@ Use **pgvector in Supabase Postgres** for canonical product and query embeddings
 
 ### LLM Routing
 
-Use **OpenRouter** as the LLM gateway with the **OpenAI SDK 6.37.0** or **@openrouter/sdk 0.4.1**. OpenRouter provides an OpenAI-compatible API to many models and normalized schemas ([OpenRouter docs](https://openrouter.ai/docs/), [OpenRouter API overview](https://openrouter.ai/docs/api-reference/overview/)). For BasketGap v1, the recommendation is **Primary: `openai/gpt-4o-mini` via OpenRouter with the model ID pinned** and **Fallback: `google/gemini-2.0-flash-001` via OpenRouter with the model ID pinned**. Remove Claude Haiku from v1: it is too expensive and capability-heavy for fallback-only use, and should be revisited only if both GPT-4o mini and Gemini 2.0 Flash prove insufficient on real Australian shorthand. This matches the spec: matching is deterministic-first, the LLM only fires on roughly 10-15% of input lines, and cheap, fast structured-extraction models are the correct tool for that narrow fallback path. Do not use `latest` aliases in production without fixture regression tests.
+Use **OpenRouter** as the LLM gateway with the **OpenAI SDK 6.37.0** or **@openrouter/sdk 0.12.35**. OpenRouter provides an OpenAI-compatible API to many models and normalized schemas ([OpenRouter docs](https://openrouter.ai/docs/), [OpenRouter API overview](https://openrouter.ai/docs/api-reference/overview/)). For BasketGap v1, the recommendation is **Primary: `openai/gpt-4o-mini` via OpenRouter with the model ID pinned** and **Fallback: `google/gemini-2.0-flash-001` via OpenRouter with the model ID pinned**. Remove Claude Haiku from v1: it is too expensive and capability-heavy for fallback-only use, and should be revisited only if both GPT-4o mini and Gemini 2.0 Flash prove insufficient on real Australian shorthand. This matches the spec: matching is deterministic-first, the LLM only fires on roughly 10-15% of input lines, and cheap, fast structured-extraction models are the correct tool for that narrow fallback path. Do not use `latest` aliases in production without fixture regression tests.
 
 Avoid **LangChain 1.4.0** for the v1 matcher. It is useful for complex agent/RAG workflows, but the spec calls for a deterministic, debuggable pipeline with a small LLM fallback. Avoid self-hosted LiteLLM unless vendor control or cost accounting becomes a major issue. Footguns: gateway routing can hide provider outages and pricing changes; log model ID, provider, latency, token counts, confidence, and fallback reason without logging raw shopping lists.
 
@@ -79,7 +79,7 @@ Use **OpenAI `text-embedding-3-small`** initially. It is cheap, stable, 1536-dim
 
 ### Scraping And Refresh Workers
 
-Use **Node.js 24**, **tsx 4.20.6**, native `fetch` first, **cheerio 1.2.0** for HTML parsing only when needed, and **Playwright 1.59.1** only for pages that require browser execution. This keeps nightly refresh cheaper and less fragile. Alternatives: Python scraping is strong but introduces another language/runtime; Puppeteer overlaps with Playwright but Playwright has better cross-browser ergonomics. Footguns: retailer endpoints may be reverse-engineered, rate-limited, blocked, or legally sensitive; keep adapters pluggable, throttle aggressively, identify freshness failures honestly, and never fabricate stock status.
+Use **Node.js 24**, **tsx 4.21.0**, native `fetch` first, **cheerio 1.2.0** for HTML parsing only when needed, and **Playwright 1.59.1** only for pages that require browser execution. This keeps nightly refresh cheaper and less fragile. Alternatives: Python scraping is strong but introduces another language/runtime; Puppeteer overlaps with Playwright but Playwright has better cross-browser ergonomics. Footguns: retailer endpoints may be reverse-engineered, rate-limited, blocked, or legally sensitive; keep adapters pluggable, throttle aggressively, identify freshness failures honestly, and never fabricate stock status.
 
 ### Job Scheduling
 
@@ -93,9 +93,11 @@ Use **Sentry React Native 8.11.0** for mobile crashes and errors; Expo documents
 
 Use **PostHog React Native 4.45.0**, but configure it minimally and privacy-first. Track funnel events such as compare started/succeeded, unmatched count bucket, latency bucket, and result viewed; do not capture shopping list content. Expo documents PostHog among feature flag/experimentation tools compatible with Expo ([Expo feature flags](https://docs.expo.dev/guides/using-feature-flags)). Alternatives: Plausible is better for web analytics than mobile product analytics; Mixpanel is mature but heavier and more commercial; no analytics is privacy-clean but weakens validation. Footgun: analytics SDKs can accidentally collect device/user identifiers; review defaults before shipping.
 
+Defer analytics entirely to v1.1 unless a specific funnel question is identified pre-launch. Privacy-first brand stance argues for conservative analytics adoption. Sentry crash reporting is sufficient operational observability for v1.
+
 ### Code Quality
 
-Use **ESLint 10.3.0** with flat config, **Prettier 3.8.3**, **Husky 9.1.7**, and **lint-staged 17.0.4**. ESLint v10 removed eslintrc and fully committed to flat config, so new projects should start there ([ESLint v10 release](https://eslint.org/blog/2026/02/eslint-v10.0.0-released/)). Alternative: **Biome 2.4.1** is fast and tempting, but React Native/Expo linting still benefits from ESLint's ecosystem. Footgun: do not run expensive full test suites in pre-commit; reserve those for CI.
+Use **ESLint 10.3.0** with flat config, **Prettier 3.8.3**, **Husky 9.1.7**, and **lint-staged 17.0.4**. ESLint v10 removed eslintrc and fully committed to flat config, so new projects should start there ([ESLint v10 release](https://eslint.org/blog/2026/02/eslint-v10.0.0-released/)). Alternative: **Biome 2.4.15** is fast and tempting, but React Native/Expo linting still benefits from ESLint's ecosystem. Footgun: do not run expensive full test suites in pre-commit; reserve those for CI.
 
 ### CI
 
@@ -175,7 +177,7 @@ Avoid camera, image picker, barcode scanner, media library, and OCR modules in v
 - **OpenRouter vs direct providers**: default to OpenRouter for fallback LLM routing. Choose direct OpenAI/Google/Anthropic if OpenRouter reliability, privacy, or pricing becomes a concern.
 - **OpenAI embeddings vs Voyage/Cohere**: default to OpenAI `text-embedding-3-small`. Benchmark Voyage 3.5-lite before scaling catalogue embeddings.
 - **GitHub Actions cron vs Vercel cron vs QStash**: default to GitHub Actions for nightly baseline and QStash later for targeted fan-out. Use Vercel cron only for short HTTP triggers.
-- **Sentry plus PostHog vs Sentry only**: default to Sentry plus minimal PostHog. Choose Sentry only if privacy review says analytics risk outweighs validation value.
+- **Sentry plus PostHog vs Sentry only**: default to Sentry only for v1. Add PostHog in v1.1, or earlier only if a specific pre-launch funnel question justifies it.
 - **Maestro vs Detox**: default to Maestro for E2E smoke. Choose Detox only for deeper deterministic native flows after the app stabilizes.
 
 ## Section 5 — Risks And Unknowns
@@ -199,7 +201,7 @@ Avoid camera, image picker, barcode scanner, media library, and OCR modules in v
 4. Choose Expo Router over raw React Navigation for the app's shallow flows.
 5. Use TanStack Query for server state and Zustand only if local draft/navigation state needs it.
 6. Use Jest/jest-expo for mobile tests, Vitest for shared/API/workers, and Maestro for E2E smoke tests.
-7. Keep API handlers plain Vercel Node Functions at first; add Hono only when routing grows.
+7. Keep API handlers plain Vercel Node Functions at first; add Hono once the API exceeds 6 endpoints or requires typed middleware.
 8. Use Supabase Postgres + pgvector, with Drizzle for server-side SQL once schema complexity justifies it.
 9. Use OpenRouter with pinned model IDs: GPT-4o mini primary and Gemini 2.0 Flash fallback; keep Claude Haiku out of v1 unless real shorthand tests prove both cheaper models insufficient.
 10. Use GitHub Actions cron first for nightly refresh; add QStash later if targeted refresh fan-out needs durability.
