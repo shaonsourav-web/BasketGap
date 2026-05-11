@@ -150,6 +150,7 @@ At request time: user pastes a list, the input intelligence layer runs the deter
 * Basket difference shown factually ("Coles lower by $X"), never as a recommendation.  
 * Promotions applied only when the user's list qualifies.  
 * Prices refreshed daily; freshness shown to user.  
+* Standard shelf prices shown in v1; member pricing deferred to a later version.  
 * Out-of-stock items reported honestly **when verifiable** — never invented.  
 * Privacy and security treated as launch-blockers.  
 * The app stays narrow, trustworthy, and continuously improving.
