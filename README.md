@@ -7,5 +7,5 @@ Type your shopping list, see what it costs at Coles vs Woolworths.
 Supabase schema migration applied — six tables live.
 
 ## Documentation
-- [Specification](./docs/spec.md)
+- [Specification](./BasketGap.md)
 - [Decisions log](./docs/decisions.md)
