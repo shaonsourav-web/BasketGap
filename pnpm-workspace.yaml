@@ -1,0 +1,11 @@
+packages:
+  - 'packages/*'
+  - 'apps/*'
+
+# Build scripts allowed to execute during install.
+# pnpm 11 requires explicit allowlisting for security.
+# - esbuild: native binary download for tsx/vitest bundlers
+# - supabase: postinstall downloads the Supabase CLI binary
+allowBuilds:
+  esbuild: true
+  supabase: true

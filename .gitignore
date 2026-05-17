@@ -24,6 +24,18 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Build / coverage / tool caches
+dist/
+coverage/
+.turbo/
+.pnpm-store/
+
+# Husky internals
+.husky/_/
+
+# Local password scratch (Round 2 bootstrap; should never be committed)
+.dbpass
+
 # Editor / IDE
 .vscode/
 .idea/
