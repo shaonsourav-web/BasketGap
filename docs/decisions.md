@@ -96,3 +96,12 @@
 
 - **Two cron workflows, same schedule, separate concurrency groups.**
   `.github/workflows/ingest-coles-pdf.yml` and `.github/workflows/ingest-woolies-pdf.yml` use identical cron expressions (Wed 03:00–18:00 AEST, every 30 min, split across two UTC ranges) but each has its own `concurrency.group` so a regression in one retailer's parser doesn't pause the other. Both gracefully exit 0 when their respective repo Variable (`CATALOGUE_URL_COLES` / `CATALOGUE_URL_WOOLIES`) is unset, so the schedules stay wired without failing until the live URLs are supplied.
+
+- **Coles "Down Down" web adapter via Playwright + cheerio.**
+  `[retailer-site]` is a JS-rendered SPA; raw `fetch` returns an empty shell. `_shared/browser.ts` wraps Playwright headless Chromium with a single `renderHtml(url, { waitForSelector })` entrypoint that navigates `domcontentloaded`, waits for the product-tile selector, performs a small number of scroll passes to trigger lazy-loaded tiles, and returns the rendered HTML as a `CatalogueSource`. The Coles-web parser is pure cheerio over that HTML and shares the existing `_shared/persist.ts` writer. The DB already accepts `catalogues.source_type = 'web'` and `specials.promo_type = 'down_down'`, so no schema change. `ParsedCatalogue.sourceType` widened from `'pdf'` to `'pdf' | 'web'`.
+
+- **HTML fixtures committed; no synthesized HTML at test time.**
+  PDFs are distributed marketing material — we render them at test time via `pdf-lib`. Web pages render small enough that committing a hand-crafted HTML fixture (`test/fixtures/coles-down-down-sample.html`) keeps tests deterministic without ever copying real Coles content. The fixture covers Down Down, half-price, percent-off, multi-buy, member-locked (must drop), and a save-only-in-promo-line tile.
+
+- **Web ingestion runs daily at 06:00 AEST, single fire, separate concurrency.**
+  `.github/workflows/ingest-coles-web.yml` runs `0 20 * * *` (UTC) plus `workflow_dispatch`. No 30-min retry sweep like PDFs — these pages mutate continuously, so multiple fires per day would over-count. Concurrency group `ingest-coles-web`, gated on `vars.CATALOGUE_URL_COLES_WEB` (skips gracefully when unset). The Playwright browser binary is installed inside the workflow via `pnpm --filter @basketgap/workers exec playwright install --with-deps chromium`. The lint/typecheck/test CI workflow does **not** install browsers — unit tests parse the committed HTML fixture.

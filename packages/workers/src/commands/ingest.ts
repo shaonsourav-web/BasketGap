@@ -1,4 +1,5 @@
 import { ingestColesPdf } from '../adapters/coles-pdf/index.ts';
+import { ingestColesWeb } from '../adapters/coles-web/index.ts';
 import { ingestWooliesPdf } from '../adapters/woolies-pdf/index.ts';
 import type { IngestOptions, IngestResult } from '../adapters/_shared/types.ts';
 import { captureException } from '../lib/observability.ts';
@@ -8,10 +9,11 @@ const USAGE = `Usage: workers ingest <adapter> [options]
 Adapters:
   coles-pdf      Ingest a Coles weekly PDF catalogue.
   woolies-pdf    Ingest a Woolworths weekly PDF catalogue.
+  coles-web      Ingest the Coles "Down Down" web specials page.
 
 Options:
-  --source-url <url>     Fetch PDF from URL.
-  --fixture <path>       Load PDF from local fixture file.
+  --source-url <url>     Fetch source from URL (PDF: HTTP, web: headless browser).
+  --fixture <path>       Load source from local fixture file.
   --dry-run              Parse only; skip database writes.
   --force-refresh        Replace existing specials if hash already ingested.
 
@@ -21,6 +23,7 @@ Exactly one of --source-url or --fixture is required.
 const ADAPTERS: Record<string, (options: IngestOptions) => Promise<IngestResult>> = {
   'coles-pdf': ingestColesPdf,
   'woolies-pdf': ingestWooliesPdf,
+  'coles-web': ingestColesWeb,
 };
 
 export async function runIngest(argv: string[]): Promise<number> {

@@ -16,7 +16,9 @@
   },
   "dependencies": {
     "@sentry/node": "10.53.1",
+    "cheerio": "^1.2.0",
     "drizzle-orm": "0.45.2",
+    "playwright": "^1.60.0",
     "postgres": "3.4.9",
     "unpdf": "^1.6.2",
     "zod": "4.4.3"

@@ -37,7 +37,7 @@ export type ParsedSpecial = {
 
 export type ParsedCatalogue = {
   retailer: RetailerCode;
-  sourceType: 'pdf';
+  sourceType: 'pdf' | 'web';
   sourceLabel: string;
   sourceUrl: string;
   sourceHash: string;
