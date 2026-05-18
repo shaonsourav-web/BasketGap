@@ -111,3 +111,47 @@
 
 - **Daily Woolies-web cron offset 30 min from Coles-web.**
   `.github/workflows/ingest-woolies-web.yml` runs `30 20 * * *` (UTC) — 06:30 AEST. Stagger avoids GitHub-side minute-of-hour contention and isolates failure modes so one retailer's parser regression doesn't pause the other. Concurrency group `ingest-woolies-web`, gated on `vars.CATALOGUE_URL_WOOLIES_WEB`. Same skip-gracefully-when-unset behaviour as the other three cron workflows.
+
+## 2026-05-19 — Round 7: Matching engine (Layer 3 Input Intelligence)
+
+- **Matching pipeline is deterministic-first, LLM-last.**
+  The nine pipeline steps run in fixed order — clean → spell-correct → shorthand → quantity-size → direct lookup (pg_trgm) → vector search (pgvector) → rank → LLM fallback → cache. Every input passes through every deterministic step before any token is spent on an LLM call. The LLM is gated on the ranker producing a top score below the `assumed` threshold (0.55); above that, the deterministic answer is final. This is the difference between this app and the alternatives: text similarity, vector similarity, brand match, size match, and a popularity prior compose mechanically, and the resulting ranking is auditable end-to-end before an LLM ever sees the input.
+
+- **Confidence bands: matched ≥ 0.80, assumed ≥ 0.55, needs_attention < 0.55.**
+  Three bands map to three UX states: silent acceptance, "we picked this — tap to change" disclosure, and "we couldn't match — pick from a shortlist." Two thresholds (not one) avoid the binary trap where a 0.79 match is treated identically to a 0.20 match. Constants live in `matching/types.ts` (`BAND_THRESHOLDS`) so the ranker, the LLM gate, and downstream UI all read from a single source.
+
+- **Ranker weights: text 0.35, vector 0.30, size 0.15, brand 0.10, popularity 0.10 + exact-match boosts.**
+  The weighted sum reflects empirically what users type. Names dominate ("milk", "snags"); sizes disambiguate ("milk 2L" vs "milk 1L"); brand and popularity are tie-breakers, not deciders. Sum = 1.0 so scores stay in [0, 1] without renormalisation. Exact-match boosts kick in when `textSimilarity ≥ 0.95`: the final score floor lifts to 0.9 (with size match) or 0.82 (without), preventing the trigram-only path (no `OPENAI_API_KEY` → vector component zeroed) from collapsing every exact-name match into the `needs_attention` band.
+
+- **LLM fallback is constrained-output: it picks from a shortlist or declines.**
+  The OpenRouter prompt names every shortlist candidate by id and forbids the model from inventing ids. The post-parse step verifies `chosenId ∈ shortlist`; out-of-set ids are dropped to `null` with reasoning `"LLM chose id outside shortlist"`. This blocks the most common LLM hallucination — synthesising a plausible-looking UUID — from ever reaching the persistence layer. Strict JSON is requested; if the model wraps the JSON in prose, a regex-based recovery extracts the first `{...}` block before parsing.
+
+- **OpenRouter default model: `google/gemini-2.0-flash-001`.**
+  Fast, cheap (≈$0.075/M input, $0.30/M output), strict-JSON capable. Overridable via `OPENROUTER_MODEL`. The pipeline never depends on a specific provider's quirks: only the constrained-output contract matters. When pricing shifts, the override is a single env var.
+
+- **Embeddings: OpenAI `text-embedding-3-small`, 1536 dims.**
+  Matches the existing `canonical_products.embedding vector(1536)` column committed in Round 1 — no migration needed. Smaller and ~10× cheaper than `-large`; the matching task is single-sentence semantic similarity where the small model is empirically sufficient. The model name is pinned in `matching/lib/embeddings.ts`; bumping requires a re-seed (and a migration if dims change).
+
+- **`match_cache` is keyed on the cleaned-input hash, not the raw input.**
+  Two basket lines that differ only in punctuation, casing, or trailing units collapse to the same SHA-256 hash after the clean + spell-correct + shorthand + quantity-size pipeline. This maximises cache reuse without poisoning it: only the determinstic-prefix output (which by construction is stable) participates in the key. The cache is **postcode-independent** — a "milk 2L" in Sydney resolves to the same canonical product as one in Perth; the postcode-specific layer is price lookup, not identity resolution.
+
+- **`match_cache.hit_count` increments on read, not on write.**
+  Reads bump `hit_count` + `last_used_at` via a write-back, so the table accumulates an organic popularity signal that future ranker tuning can feed into the popularity prior. Today it's instrumentation; later it's a feedback loop. The read path takes one extra round-trip but cache hits are cheap regardless.
+
+- **Cache writes only fire above the needs_attention floor.**
+  `needs_attention` results are not cached, on the theory that the canonical catalogue may grow and a previously-unmatched input could become matchable next round. Caching a failure would lock in a stale "no match" answer until manual eviction. `matched` and `assumed` results cache freely.
+
+- **Canonical seed: 152 hand-curated entries across 10 categories.**
+  Dairy, bakery, eggs, pantry, produce, meat, frozen, snacks, drinks, household. The seed is intentionally small enough to embed in a single OpenAI batch but broad enough to exercise every step of the pipeline (size variants, brand-anchored entries, brand-agnostic entries, plural/singular pairs, Aussie-specific staples). Future enrichment via the `enrich-skus` command grows the catalogue from real retailer data. Seed IDs are deterministic — `deterministicUuid(name, brand, category, uom, value)` — so re-running the seed against the same entries is idempotent without coordination.
+
+- **`workers seed canonical` requires `OPENAI_API_KEY` for live runs; dry-run plans without it.**
+  Embeddings are mandatory for the vector path, so live seeding can't degrade to no-embed mode. But `--dry-run` short-circuits before any API call and reports the insert / refresh / already-present split, which is enough for CI smoke tests and local plan-checks. `--force-refresh` re-embeds every entry — useful when bumping the embedding model.
+
+- **`workers enrich-skus` walks `selectDistinctOn(retailer, retailer_sku)`.**
+  A single SKU may appear in dozens of `specials` rows over time (each weekly catalogue is a fresh row). The enrich pass needs one canonical-product decision per SKU, not per observation. PostgreSQL's `DISTINCT ON` with `ORDER BY retailer, retailer_sku, updated_at DESC` picks the freshest name/brand/size for each SKU. The result is written to `retailer_skus` with `match_confidence` derived from the ranker's `finalScore` (clamped to [0, 1], stored as decimal(3,2)).
+
+- **Shorthand expansion uses n-gram lookup up to trigrams.**
+  Aussie slang like "long life milk" → "uht milk" or "spag bol" → "spaghetti bolognese" is multi-token. Descending-length matching (3-gram → 2-gram → 1-gram) ensures the longest matching phrase wins, so "long life milk 2L" expands to "uht milk 2L" not "long milk 2L" (where "long" alone has no shorthand entry). The dictionary lives in `matching/dictionaries/shorthand.ts` and is hand-curated; growing it is additive and never requires touching the algorithm.
+
+- **Pipeline degrades cleanly when API keys are absent.**
+  No `OPENAI_API_KEY` → vector step returns `[]` and the ranker zeroes the vector component (boost still recovers exact-name matches via the trigram path). No `OPENROUTER_API_KEY` → LLM fallback returns `null` and the deterministic rank is the final answer. Both absent → fully offline matching against the seeded catalogue. This matters because CI runs without secrets, local dev often does too, and the cron failure mode for a transient OpenAI/OpenRouter outage should be "matches still ship, just less accurately" rather than "no matches today."

@@ -162,5 +162,19 @@ export const zones = pgTable('zones', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const matchCache = pgTable('match_cache', {
+  cleanedInputHash: text('cleaned_input_hash').primaryKey(),
+  cleanedInput: text('cleaned_input').notNull(),
+  canonicalProductId: uuid('canonical_product_id').references(() => canonicalProducts.id, {
+    onDelete: 'set null',
+  }),
+  confidenceBand: text('confidence_band').notNull(),
+  alternatives: jsonb('alternatives').notNull().default([]),
+  decidedBy: text('decided_by').notNull(),
+  hitCount: integer('hit_count').notNull().default(1),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 // `sql` is re-exported so future query files can use raw fragments without re-importing.
 export { sql };
