@@ -78,3 +78,21 @@
 
 - **Use Node 24's built-in `fetch` for PDF downloads — no `axios`, no `node-fetch`.**
   `discover.fetchPdf(url)` calls global `fetch` with a User-Agent identifying BasketGap, a single retry on 429/503 honouring `Retry-After`, and content-type validation. No new HTTP dependency. When the future Woolies adapter shares the retry policy, we extract to `_shared/`.
+
+- **Shared adapter scaffolding lifted to `src/adapters/_shared/` ahead of Woolies.**
+  `CatalogueSource`, `ParsedSpecial`, `ParsedCatalogue`, `IngestOptions`, `IngestResult` types, the `loadFromFixture`/`fetchPdf` discover module, the `extractPdfPages` unpdf wrapper, and the `persistCatalogue` function all live under `src/adapters/_shared/`. The retailer-specific code is now just the `parse.ts` regex set plus a thin `index.ts` orchestrator. `persistCatalogue` reads `parsed.retailer` and writes the correct discriminator into `catalogues` / `specials` rows. Refactor performed during Round 4 Gate 1; Coles tests (14 unit + 3 integration) stayed green throughout.
+
+- **Woolworths PDF adapter — new retailer, separate parser file.**
+  `packages/workers/src/adapters/woolies-pdf/{parse,index}.ts` mirrors the Coles adapter's shape. The two parsers don't share regex sets because Woolies templates differ enough that a generic would be flag-heavy and harder to maintain than two specialists. Concrete differences encoded:
+  - "Save $X.XX" frequently appears _above_ the price (Coles puts it below). The Woolies parser strips the SAVE token before running the PRICE regex so the special-price extractor doesn't latch onto the savings amount.
+  - "Prices Dropped" is the Woolies equivalent of Coles' "Down Down" and maps to `promo_type='prices_dropped'`. The `promoType` union widens; `specials.promo_type` stays `text`, no schema change.
+  - "Members only" / "Rewards member price" lines are dropped, same as Coles' flybuys handling, with a slightly different regex.
+
+- **Price-anchor selection guards against save-line hijacking.**
+  Both parsers walk per-page lines and treat any line containing a `$` token as a price anchor. The Woolies layout (save-above-price) exposed a bug: a line like `save $1.50` would match the PRICE regex and the iterator would treat the save value as a special price. Fix: before treating line `i` as an anchor, strip the SAVE pattern and check whether a price still remains. Lines that are _only_ save amounts are skipped; the actual price line on the following row becomes the anchor and its backward scan pulls the save line into the block. Coles tests stay green because Coles' fixture has save-below-price (the regex's `.match()` returns the first match which is the actual price). Same logic applied to both parsers for robustness.
+
+- **CLI dispatcher is a name-keyed map of orchestrators.**
+  `src/commands/ingest.ts` now picks between `coles-pdf` and `woolies-pdf` via a `Record<string, (opts) => Promise<IngestResult>>` lookup. Adding the next adapter (web surfaces, ALDI) means appending a single map entry. The flag parser, error-handling path, and JSON summary shape are shared.
+
+- **Two cron workflows, same schedule, separate concurrency groups.**
+  `.github/workflows/ingest-coles-pdf.yml` and `.github/workflows/ingest-woolies-pdf.yml` use identical cron expressions (Wed 03:00–18:00 AEST, every 30 min, split across two UTC ranges) but each has its own `concurrency.group` so a regression in one retailer's parser doesn't pause the other. Both gracefully exit 0 when their respective repo Variable (`CATALOGUE_URL_COLES` / `CATALOGUE_URL_WOOLIES`) is unset, so the schedules stay wired without failing until the live URLs are supplied.

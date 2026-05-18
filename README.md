@@ -5,7 +5,7 @@ Type your shopping list, see what it costs at Coles vs Woolworths.
 
 ## Status
 
-Coles weekly PDF adapter shipped — `pnpm --filter @basketgap/workers exec tsx src/cli.ts ingest coles-pdf --fixture <path>` parses the catalogue, persists `catalogues` + `specials` rows, and is idempotent on the source-hash. Cron wired for Wednesday polling; live source URL deferred to the web adapter round.
+Both retailer weekly PDF adapters shipped — `workers ingest coles-pdf | woolies-pdf [--fixture <path> | --source-url <url>] [--dry-run] [--force-refresh]` parses each retailer's catalogue, persists `catalogues` + `specials` rows under the right `retailer` discriminator, and is idempotent on the source-hash. Cron workflows wired for Wednesday polling on both; live source URL discovery deferred to the web adapter round.
 
 ## Documentation
 

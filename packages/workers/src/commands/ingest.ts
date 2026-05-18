@@ -1,12 +1,15 @@
 import { ingestColesPdf } from '../adapters/coles-pdf/index.ts';
+import { ingestWooliesPdf } from '../adapters/woolies-pdf/index.ts';
+import type { IngestOptions, IngestResult } from '../adapters/_shared/types.ts';
 import { captureException } from '../lib/observability.ts';
 
 const USAGE = `Usage: workers ingest <adapter> [options]
 
 Adapters:
-  coles-pdf    Ingest a Coles weekly PDF catalogue.
+  coles-pdf      Ingest a Coles weekly PDF catalogue.
+  woolies-pdf    Ingest a Woolworths weekly PDF catalogue.
 
-Options (coles-pdf):
+Options:
   --source-url <url>     Fetch PDF from URL.
   --fixture <path>       Load PDF from local fixture file.
   --dry-run              Parse only; skip database writes.
@@ -15,13 +18,19 @@ Options (coles-pdf):
 Exactly one of --source-url or --fixture is required.
 `;
 
+const ADAPTERS: Record<string, (options: IngestOptions) => Promise<IngestResult>> = {
+  'coles-pdf': ingestColesPdf,
+  'woolies-pdf': ingestWooliesPdf,
+};
+
 export async function runIngest(argv: string[]): Promise<number> {
   const [adapter, ...rest] = argv;
   if (!adapter || adapter === '-h' || adapter === '--help') {
     process.stdout.write(USAGE);
     return adapter ? 0 : 1;
   }
-  if (adapter !== 'coles-pdf') {
+  const ingester = ADAPTERS[adapter];
+  if (!ingester) {
     process.stderr.write(`Unknown adapter: ${adapter}\n${USAGE}`);
     return 1;
   }
@@ -33,9 +42,10 @@ export async function runIngest(argv: string[]): Promise<number> {
   }
 
   try {
-    const result = await ingestColesPdf(options);
+    const result = await ingester(options);
     const summary = {
       ok: true,
+      adapter,
       catalogueId: result.catalogueId,
       skipped: result.skipped,
       reason: result.reason,
@@ -51,6 +61,7 @@ export async function runIngest(argv: string[]): Promise<number> {
     process.stderr.write(
       JSON.stringify({
         ok: false,
+        adapter,
         error: err instanceof Error ? err.message : String(err),
       }) + '\n',
     );
