@@ -1,6 +1,7 @@
 import { ingestColesPdf } from '../adapters/coles-pdf/index.ts';
 import { ingestColesWeb } from '../adapters/coles-web/index.ts';
 import { ingestWooliesPdf } from '../adapters/woolies-pdf/index.ts';
+import { ingestWooliesWeb } from '../adapters/woolies-web/index.ts';
 import type { IngestOptions, IngestResult } from '../adapters/_shared/types.ts';
 import { captureException } from '../lib/observability.ts';
 
@@ -10,6 +11,7 @@ Adapters:
   coles-pdf      Ingest a Coles weekly PDF catalogue.
   woolies-pdf    Ingest a Woolworths weekly PDF catalogue.
   coles-web      Ingest the Coles "Down Down" web specials page.
+  woolies-web    Ingest the Woolworths "Prices Dropped" web specials page.
 
 Options:
   --source-url <url>     Fetch source from URL (PDF: HTTP, web: headless browser).
@@ -24,6 +26,7 @@ const ADAPTERS: Record<string, (options: IngestOptions) => Promise<IngestResult>
   'coles-pdf': ingestColesPdf,
   'woolies-pdf': ingestWooliesPdf,
   'coles-web': ingestColesWeb,
+  'woolies-web': ingestWooliesWeb,
 };
 
 export async function runIngest(argv: string[]): Promise<number> {

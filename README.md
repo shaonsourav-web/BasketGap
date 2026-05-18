@@ -5,7 +5,7 @@ Type your shopping list, see what it costs at Coles vs Woolworths.
 
 ## Status
 
-Three adapters shipped — `workers ingest coles-pdf | woolies-pdf | coles-web [--fixture <path> | --source-url <url>] [--dry-run] [--force-refresh]`. The PDF adapters parse each retailer's weekly catalogue; `coles-web` renders the "Down Down" specials page via Playwright headless Chromium and parses it with cheerio. All three persist into the same `catalogues` + `specials` tables under the right `(retailer, source_type)` discriminator, idempotent on `source_hash`. Cron workflows: Wednesday weekly polling for PDFs, daily 06:00 AEST for `coles-web`. Live source URL for `coles-web` is set via repo Variable `CATALOGUE_URL_COLES_WEB`; Woolies "Prices Dropped" web adapter is the next round.
+All four retailer adapters shipped — `workers ingest coles-pdf | woolies-pdf | coles-web | woolies-web [--fixture <path> | --source-url <url>] [--dry-run] [--force-refresh]`. The PDF adapters parse each retailer's weekly catalogue; the web adapters render the "Down Down" / "Prices Dropped" pages via Playwright headless Chromium and parse them with cheerio. All persist into the same `catalogues` + `specials` tables under the right `(retailer, source_type)` discriminator, idempotent on `source_hash`. Cron workflows: weekly Wednesday polling for PDFs, daily 06:00 AEST (Coles) and 06:30 AEST (Woolies) for the web adapters. Live source URLs are set via repo Variables `CATALOGUE_URL_COLES`, `CATALOGUE_URL_WOOLIES`, `CATALOGUE_URL_COLES_WEB`, `CATALOGUE_URL_WOOLIES_WEB`.
 
 ## Documentation
 

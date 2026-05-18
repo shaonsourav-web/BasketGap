@@ -105,3 +105,9 @@
 
 - **Web ingestion runs daily at 06:00 AEST, single fire, separate concurrency.**
   `.github/workflows/ingest-coles-web.yml` runs `0 20 * * *` (UTC) plus `workflow_dispatch`. No 30-min retry sweep like PDFs — these pages mutate continuously, so multiple fires per day would over-count. Concurrency group `ingest-coles-web`, gated on `vars.CATALOGUE_URL_COLES_WEB` (skips gracefully when unset). The Playwright browser binary is installed inside the workflow via `pnpm --filter @basketgap/workers exec playwright install --with-deps chromium`. The lint/typecheck/test CI workflow does **not** install browsers — unit tests parse the committed HTML fixture.
+
+- **Woolworths "Prices Dropped" web adapter mirrors the Coles-web shape.**
+  `packages/workers/src/adapters/woolies-web/{parse,index}.ts` reuses every shared module from Round 5 (`_shared/browser.ts`, `_shared/persist.ts`, `loadHtmlFromFixture`). The only Woolies-specific code is the cheerio parser (different tile selectors — `[tile-selector]`, `[data-testid="tile"]`, `.product-tile-v2`) and the orchestrator. Same parser/fixture/persist/CLI pattern as Coles-web; same idempotency-on-source-hash; same silent member-locked drop. Promotion taxonomy already supports `'prices_dropped'` (added in Round 4 for the PDF parser). Two specialist parsers beat one general-purpose parser with a retailer flag — same call as the PDF round.
+
+- **Daily Woolies-web cron offset 30 min from Coles-web.**
+  `.github/workflows/ingest-woolies-web.yml` runs `30 20 * * *` (UTC) — 06:30 AEST. Stagger avoids GitHub-side minute-of-hour contention and isolates failure modes so one retailer's parser regression doesn't pause the other. Concurrency group `ingest-woolies-web`, gated on `vars.CATALOGUE_URL_WOOLIES_WEB`. Same skip-gracefully-when-unset behaviour as the other three cron workflows.
