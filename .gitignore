@@ -30,6 +30,9 @@ coverage/
 .turbo/
 .pnpm-store/
 
+# Test fixture caches (generated at test time)
+**/test/fixtures/.cache/
+
 # Husky internals
 .husky/_/
 

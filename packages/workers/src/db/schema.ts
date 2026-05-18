@@ -14,6 +14,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -84,44 +85,54 @@ export const retailerSkus = pgTable(
   }),
 );
 
-export const specials = pgTable('specials', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  catalogueId: uuid('catalogue_id')
-    .notNull()
-    .references(() => catalogues.id, { onDelete: 'cascade' }),
-  retailerSkuId: uuid('retailer_sku_id').references(() => retailerSkus.id, {
-    onDelete: 'set null',
+export const specials = pgTable(
+  'specials',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    catalogueId: uuid('catalogue_id')
+      .notNull()
+      .references(() => catalogues.id, { onDelete: 'cascade' }),
+    retailerSkuId: uuid('retailer_sku_id').references(() => retailerSkus.id, {
+      onDelete: 'set null',
+    }),
+    retailer: text('retailer').notNull(),
+    sourceType: text('source_type').notNull(),
+    sourceLabel: text('source_label').notNull(),
+    state: text('state'),
+    retailerSku: text('retailer_sku'),
+    productName: text('product_name').notNull(),
+    brand: text('brand'),
+    sizeText: text('size_text'),
+    unitSizeValue: numeric('unit_size_value'),
+    unitSizeUom: text('unit_size_uom'),
+    regularPrice: numeric('regular_price', { precision: 10, scale: 2 }),
+    specialPrice: numeric('special_price', { precision: 10, scale: 2 }).notNull(),
+    savingsAmount: numeric('savings_amount', { precision: 10, scale: 2 }),
+    savingsPercent: numeric('savings_percent', { precision: 5, scale: 2 }),
+    unitPriceValue: numeric('unit_price_value', { precision: 10, scale: 4 }),
+    unitPriceUom: text('unit_price_uom'),
+    promoType: text('promo_type').notNull().default('standard'),
+    promoLabel: text('promo_label'),
+    multiBuy: boolean('multi_buy').notNull().default(false),
+    isMemberLocked: boolean('is_member_locked').notNull().default(false),
+    validFrom: date('valid_from'),
+    validTo: date('valid_to'),
+    imageUrl: text('image_url'),
+    sourcePage: integer('source_page'),
+    rawText: text('raw_text'),
+    rawPayload: jsonb('raw_payload'),
+    confidenceScore: numeric('confidence_score', { precision: 3, scale: 2 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    // Partial unique — enforced only where retailer_sku is set. See migration
+    // 20260518000000_round3_specials_unique.sql.
+    catalogueRetailerSkuUnique: uniqueIndex('specials_catalogue_retailer_sku_unique')
+      .on(table.catalogueId, table.retailerSku)
+      .where(sql`retailer_sku is not null`),
   }),
-  retailer: text('retailer').notNull(),
-  sourceType: text('source_type').notNull(),
-  sourceLabel: text('source_label').notNull(),
-  state: text('state'),
-  retailerSku: text('retailer_sku'),
-  productName: text('product_name').notNull(),
-  brand: text('brand'),
-  sizeText: text('size_text'),
-  unitSizeValue: numeric('unit_size_value'),
-  unitSizeUom: text('unit_size_uom'),
-  regularPrice: numeric('regular_price', { precision: 10, scale: 2 }),
-  specialPrice: numeric('special_price', { precision: 10, scale: 2 }).notNull(),
-  savingsAmount: numeric('savings_amount', { precision: 10, scale: 2 }),
-  savingsPercent: numeric('savings_percent', { precision: 5, scale: 2 }),
-  unitPriceValue: numeric('unit_price_value', { precision: 10, scale: 4 }),
-  unitPriceUom: text('unit_price_uom'),
-  promoType: text('promo_type').notNull().default('standard'),
-  promoLabel: text('promo_label'),
-  multiBuy: boolean('multi_buy').notNull().default(false),
-  isMemberLocked: boolean('is_member_locked').notNull().default(false),
-  validFrom: date('valid_from'),
-  validTo: date('valid_to'),
-  imageUrl: text('image_url'),
-  sourcePage: integer('source_page'),
-  rawText: text('raw_text'),
-  rawPayload: jsonb('raw_payload'),
-  confidenceScore: numeric('confidence_score', { precision: 3, scale: 2 }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+);
 
 export const priceObservations = pgTable('price_observations', {
   id: uuid('id').primaryKey().defaultRandom(),
