@@ -1,6 +1,18 @@
-import { SHORTHAND } from '../dictionaries/shorthand.ts';
+import { HEAD_DEFAULTS, SHORTHAND } from '../dictionaries/shorthand.ts';
 
 const MAX_NGRAM = 3;
+
+/**
+ * Tokens that carry pack/size information rather than product identity. They
+ * are ignored when testing a line against {@link HEAD_DEFAULTS} (and left in
+ * place afterwards, so step 04 can still extract them).
+ */
+const SIZE_TOKENS = new Set(['l', 'ml', 'kg', 'g', 'ea', 'pack', 'dozen']);
+
+function isSizeToken(token: string): boolean {
+  if (/^x?\d+(\.\d+)?$/.test(token)) return true;
+  return SIZE_TOKENS.has(token.toLowerCase());
+}
 
 export function expandShorthand(cleaned: string): string {
   if (!cleaned) return cleaned;
@@ -31,7 +43,23 @@ export function expandShorthand(cleaned: string): string {
     }
     i += consumed;
   }
-  return result.join(' ');
+  return applyHeadDefault(result).join(' ');
+}
+
+/**
+ * Resolves a bare head to the catalogue's default variant — but **only when the
+ * head is the whole line** once trailing size/pack tokens are set aside. So
+ * "milk 1 L" becomes "full cream milk 1 L" while "almond milk", "soy milk" and
+ * "skim milk" pass through untouched, and a line the catalogue cannot serve
+ * ("snacks", "toothpaste") never acquires a default it did not ask for.
+ */
+function applyHeadDefault(tokens: string[]): string[] {
+  let end = tokens.length;
+  while (end > 0 && isSizeToken(tokens[end - 1]!)) end--;
+  if (end === 0) return tokens;
+  const hit = HEAD_DEFAULTS[tokens.slice(0, end).join(' ').toLowerCase()];
+  if (!hit) return tokens;
+  return [...hit.split(' '), ...tokens.slice(end)];
 }
 
 /**

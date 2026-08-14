@@ -259,4 +259,23 @@ export const LABELLED_LINES: LabelledLine[] = [
   { line: 'snacks', expected: null, tags: ['vague'] },
   { line: 'stuff for dinner', expected: null, tags: ['vague'] },
   { line: 'xyzzy asdf', expected: null, tags: ['out-of-catalogue'] },
+
+  // ------------------------------------- Round 8.5 hardening: new coverage
+  // Added 2026-08-14 alongside the grown shorthand dictionary and the fuzzy
+  // spell corrector. Lines 1–9 document coverage the deterministic path gained;
+  // `icecream 2l` and `bbq snags 500g` are known remaining false negatives kept
+  // in the set on purpose so the harness still has something to fail on; the
+  // final line proves ungrounded slang is deferred rather than invented.
+  { line: 'washing powder 2kg', expected: 'Laundry Detergent Powder', tags: ['slang', 'size'] },
+  { line: 'oj 2l', expected: 'Orange Juice', tags: ['shorthand', 'size'] },
+  { line: 'dozen eggs', expected: 'Free Range Eggs', tags: ['shorthand', 'multipack'] },
+  { line: 'tinned tuna', expected: 'Tuna in Springwater', tags: ['shorthand'] },
+  { line: 'mushies 500g', expected: 'Mushrooms', tags: ['slang', 'size'] },
+  { line: 'cucmber', expected: 'Cucumber', tags: ['typo'] },
+  { line: 'strawbs', expected: 'Strawberries Punnet', tags: ['slang'] },
+  { line: 'spinnach 120g', expected: 'Baby Spinach', tags: ['typo', 'size'] },
+  { line: 'almond milk', expected: 'Almond Milk Unsweetened', tags: ['vague'] },
+  { line: 'icecream 2l', expected: 'Vanilla Ice Cream', tags: ['typo', 'vague'] },
+  { line: 'bbq snags 500g', expected: 'Beef Sausages', tags: ['slang', 'size'] },
+  { line: 'sav blanc', expected: null, tags: ['out-of-catalogue', 'slang'] },
 ];

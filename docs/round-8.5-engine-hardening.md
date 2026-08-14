@@ -52,6 +52,7 @@ Ordered by leverage. Each is small and testable in isolation.
 6. **Use multipack quantity (defect 6).** Pass `quantity` into the result so the app can multiply prices; optionally factor into ranking for pack-sized canonicals. (Lower priority — mostly an app-layer/display concern.)
 7. **Reweight + re-tune bands** _after_ 3–5 are live (so brand/popularity actually fire), validated by the eval harness (Part B) — do **not** hand-tweak thresholds blind.
 8. **Performance / cost (for "super easy = fast"):** batch the per-line query embeddings across a basket instead of the serial loop in `matchBasket`; short-circuit vector search when direct lookup already returns an exact-name hit (saves an OpenAI call + latency per line).
+9. **Offline recall (defect 9, plus the dictionary half of defect 8).** Grow `dictionaries/shorthand.ts` and replace exact-match-only typo correction with a bounded fuzzy corrector. Step-internal only — no step reordering, no `BAND_THRESHOLDS` / `RANK_WEIGHTS` change. **Done 2026-08-14** — see the after-table below.
 
 ## Part B — Measurement (the "how good is it" answer)
 
@@ -86,6 +87,40 @@ Run focused: `pnpm --filter @basketgap/shared test:eval`.
 Reading of the baseline: with no `OPENAI_API_KEY` the vector component (0.30 of the weight) and the popularity prior (0.10) are both zero, so scores come from the trigram + size + brand terms and the boost ladder. That makes the engine **conservative, not wrong** — 100% precision in `matched`, but every miss is silence. The false negatives cluster exactly where the doc predicted: unexpanded slang/abbreviation (`fc milk`, `evoo`, `coke`, `cuppa`, `tim tams`, `chook breast`, `rump`, `rashers`), fuzzy typos outside the 46-entry table (`bannanas`, `red onoins`, `chese`), and short/vague heads whose trigram overlap with a longer canonical name is low (`milk 1L`, `macaroni`, `lentils`, `bred`). Cheapest wins in order: grow `dictionaries/shorthand.ts`, replace exact-match typos with fuzzy correction, then re-measure before touching `BAND_THRESHOLDS`.
 
 **This table is the gate.** Re-run the harness after any threshold/weight change and compare; do not tune blind.
+
+### After A9 — dictionary growth + fuzzy typo correction (2026-08-14)
+
+Two step-internal changes, no reordering, no `BAND_THRESHOLDS` / `RANK_WEIGHTS` edit:
+
+1. **`dictionaries/shorthand.ts` grown** (~80 → ~170 shorthand entries) and a second map added, `HEAD_DEFAULTS`, applied in step 03 only when the key is the **entire line** once trailing size/pack tokens are set aside ("milk 1L" → full cream; "almond milk" untouched).
+2. **Step 02 made fuzzy** — the 46-entry exact table stays as a fast path, then a bounded Damerau–Levenshtein (OSA) pass corrects against a catalogue-derived vocabulary. ≤ 1 edit, ≤ 2 from 6 characters up, never below 4 characters, never a word already in the vocabulary, and **ties are refused** (two vocabulary words at the same distance ⇒ no correction).
+
+12 labelled lines were added (188 → 200) documenting the new coverage, two known remaining false negatives and one ungrounded-slang deferral. No existing line was relabelled or removed.
+
+| Band              | before (n / correct / precision) | after (n / correct / precision) |
+| ----------------- | -------------------------------- | ------------------------------- |
+| `matched`         | 138 / 138 / 100.0%               | 175 / 175 / **100.0%**          |
+| `assumed`         | 5 / 4 / 80.0%                    | 3 / 3 / **100.0%**              |
+| `needs_attention` | 45 / 19 / 42.2%                  | 22 / 20 / **90.9%**             |
+
+| Metric                    |           before |               after |
+| ------------------------- | ---------------: | ------------------: |
+| labelled lines            |              188 |                 200 |
+| overall accuracy          |        **85.6%** |           **99.0%** |
+| in-catalogue recall       | 84.0 % (142/169) | **98.9%** (178/180) |
+| `needs_attention` rate    |            23.9% |               11.0% |
+| out-of-catalogue deferral | **100%** (19/19) |    **100%** (20/20) |
+| wrong picks               |                1 |               **0** |
+| false negatives           |               26 |               **2** |
+
+The one wrong pick is gone: `"laundry detergent liquid 2l"` used to hit the unigram `detergent → dishwashing liquid`; the bigram `laundry detergent → laundry detergent liquid` now wins (longest n-gram first) and resolves it correctly.
+
+**Remaining false negatives (2):**
+
+- `"icecream 2l"` → expected `Vanilla Ice Cream`, scored 0.272. Needs compound-word splitting ("icecream" → "ice cream"), which the token-level corrector cannot do — the whole token is 8 characters from any single vocabulary word.
+- `"bbq snags 500g"` → expected `Beef Sausages`, scored 0.356. "snags" correctly expands to "sausages", but choosing **beef** over **pork** sausages from the modifier "bbq" is a semantic call that only the vector path or the LLM fallback can make. Genuinely ambiguous offline.
+
+Both are honest gaps kept in the labelled set so the harness still has something to fail on. Also worth noting: `"bega tasty 500g"` now resolves (`assumed`, correct product) only because the shorthand supplies the missing product words — the seed catalogue carries **no Bega brand row**, so the brand signal still does nothing here. That is defect 8 (toy catalogue), not a dictionary problem, and Part C fixes it.
 
 ## Part C — Catalogue strategy (specialist recommendation: **Hybrid**)
 
