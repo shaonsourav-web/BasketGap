@@ -17,6 +17,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:eval": "vitest run src/matching/__tests__/eval --reporter=verbose",
+    "playground": "tsx scripts/playground.ts",
     "db:pull": "tsx --env-file=../../.env.local node_modules/.bin/drizzle-kit pull"
   },
   "dependencies": {
