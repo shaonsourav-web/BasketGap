@@ -47,3 +47,9 @@ coverage/
 
 # OS
 Thumbs.db
+
+# Claude Code: ignore contents (.claude/*), not the directory itself — keep
+# the fleet definitions and bridges versioned, drop session-local state.
+.claude/*
+!.claude/agents/
+!.claude/bin/

@@ -9,7 +9,7 @@ export default tseslint.config(
       '**/coverage/**',
       '**/.turbo/**',
       '**/*.d.ts',
-      'packages/workers/src/db/schema.ts',
+      'packages/shared/src/db/schema.ts',
     ],
   },
   ...tseslint.configs.recommended,
