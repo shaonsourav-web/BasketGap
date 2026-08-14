@@ -163,3 +163,23 @@
 
 - **Catalogue breadth (Round 8.5 Part C) stays within the already-approved data surfaces.**
   Canonical catalogue = the 152-staple hand-curated floor plus bootstrap from real ingested specials via `enrich-skus`, exactly matching the v1 pricing universe (weekly catalogues + Down Down / Prices Dropped). Rejected: external product datasets (Open Food Facts — unnecessary at this scope, and its ODbL share-alike adds obligations for no gain), paid scraper services (the app is free; recurring data costs don't fit), and full-catalogue pulls through retailer backend APIs (bot-protection circumvention; the risk category `decisions.md` 2026-05-16 flagged and never approved). Context worth re-checking later: the ACCC supermarkets inquiry recommended mandated price APIs and a Jan–Feb 2026 Treasury consultation proposed a right-to-scrape for comparison apps — if either lands, revisit standard-price coverage as a post-v1 decision.
+
+## 2026-08-14
+
+- **Eval harness labels are canonical _names_, not ids.**
+  `labelled-lines.ts` maps each messy line to the canonical product's `name` string as it appears in `seed/canonical-seed.ts`. Ids are `deterministicUuid(name, brand, category, uom, value)` — opaque, unreviewable in a diff, and they change if a seed row's size is ever corrected. Names are human-checkable, so a reviewer can see at a glance whether a label is right. The consequence is deliberate: the three `Full Cream Milk` rows (1L / 2L / 3L) share one label, so the harness measures **product identity**, not pack-size selection. A test asserts every non-null label exists in the seed, so a typo'd or renamed canonical fails the suite rather than silently scoring as a miss.
+
+- **The harness measures the deterministic path only — no embedding stand-in.**
+  It runs with `hasOpenAi: false` / `hasOpenRouter: false`, so the vector step and the LLM fallback short-circuit exactly as they do in a keyless environment. A synthetic lexical "embedding" was considered and rejected: it would have inflated the baseline with numbers that describe the stub rather than OpenAI's `text-embedding-3-small`, which is the opposite of what a tuning gate is for. The published baseline is therefore the engine's **floor** — the quality when both paid signals are unavailable. When the catalogue is embedded and a key is present, real numbers must be recorded separately (live run, not CI).
+
+- **`pg_trgm similarity()` is re-implemented offline in `__tests__/eval/pg-trgm.ts`.**
+  The deterministic path is driven almost entirely by `similarity(lower(name), cleaned)` inside `matching/db.ts`, so an offline harness that faked that number would measure nothing. The stand-in reproduces pg_trgm's model exactly — lowercase, non-alphanumerics as word breaks, each word padded to `"  word "` and cut into 3-char windows, de-duplicated into a set, Jaccard over the sets — and `loadCandidatesByName` mirrors the real SQL's `greatest(name, brand)` scoring, `> 0.2` filter, `order by desc`, `limit 10`. It is test-only code; nothing in the pipeline imports it. If the live query's filter or ordering changes, this file changes with it.
+
+- **The harness's cache is a no-op, and every popularity prior is 0.**
+  `readCache` always misses and `writeCache` discards, so each labelled line is scored independently of the order the fixture happens to be written in and the numbers stay stable as lines are added. `popularityPrior: 0` for every row matches a cold catalogue with no `match_cache` traffic — the state at launch, and the honest floor for a pre-traffic baseline.
+
+- **Eval assertions are a crash floor, not a quality target.**
+  `eval.test.ts` asserts the harness runs, that bands agree with `BAND_THRESHOLDS`, that `needs_attention` never leaks a canonical id, and three loose floors the deterministic path clears today with room to spare (`matched` precision ≥ 0.90, `needs_attention` rate < 0.75, out-of-catalogue deferral ≥ 0.60). Aspirational numbers were deliberately not encoded: the suite's job is to _report_ a quality regression, and a red CI on a number nobody has fixed yet trains people to ignore it. The real gate is the human comparison against the baseline table in `docs/round-8.5-engine-hardening.md`.
+
+- **The report bypasses `console.log` (`fs.writeSync(1, …)`).**
+  Vitest 4's default reporter swallows console output from passing tests, which would have hidden the entire point of the suite in a normal `pnpm -r test`. Writing to fd 1 directly makes the baseline visible in every CI run. `pnpm --filter @basketgap/shared test:eval` runs it focused with the verbose reporter.

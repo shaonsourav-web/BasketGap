@@ -57,6 +57,36 @@ Ordered by leverage. Each is small and testable in isolation.
 
 Build a small **eval harness** before touching thresholds: a labelled set of ~100–200 real messy AU shopping lines (staples, brands, private-label, typos, multipacks, slang) each mapped to the expected canonical. Report: precision within each band, `needs_attention` rate, and mismatch examples. This is what lets us _prove_ quality and calibrate the 0.80 / 0.55 cutoffs and boost ladder instead of guessing. Lives as a vitest fixture in `packages/shared/src/matching/__tests__/eval/`.
 
+### Status: built (2026-08-14)
+
+| File                                  | Role                                                                                               |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `__tests__/eval/labelled-lines.ts`    | 188 labelled lines (`{ line, expected, tags }`); data only — add lines without touching the runner |
+| `__tests__/eval/offline-catalogue.ts` | In-memory 152-row catalogue from `CANONICAL_SEED` + the offline `PipelineContext`                  |
+| `__tests__/eval/pg-trgm.ts`           | Offline re-implementation of PostgreSQL `pg_trgm similarity()`                                     |
+| `__tests__/eval/harness.ts`           | Runner, scoring, `EvalReport`, formatted summary                                                   |
+| `__tests__/eval/eval.test.ts`         | Vitest gate; prints the report on every `pnpm -r test`                                             |
+
+Run focused: `pnpm --filter @basketgap/shared test:eval`.
+
+### Baseline — 2026-08-14 (deterministic offline path, 188 labelled lines)
+
+| Band              |   n | correct | precision |
+| ----------------- | --: | ------: | --------: |
+| `matched`         | 138 |     138 |    100.0% |
+| `assumed`         |   5 |       4 |     80.0% |
+| `needs_attention` |  45 |      19 |     42.2% |
+
+- `needs_attention` rate: **23.9%** (45/188)
+- Overall accuracy: **85.6%**
+- In-catalogue recall: **84.0%** (142/169)
+- Out-of-catalogue correctly deferred: **100%** (19/19) — the engine never invented an answer for an item the catalogue does not carry
+- Mismatches: **27**, of which **26 are false negatives** (`needs_attention` on a line that has a catalogue answer) and **1 is a wrong pick** (`"laundry detergent liquid 2l"` → `Dishwashing Liquid`, `assumed` 0.60)
+
+Reading of the baseline: with no `OPENAI_API_KEY` the vector component (0.30 of the weight) and the popularity prior (0.10) are both zero, so scores come from the trigram + size + brand terms and the boost ladder. That makes the engine **conservative, not wrong** — 100% precision in `matched`, but every miss is silence. The false negatives cluster exactly where the doc predicted: unexpanded slang/abbreviation (`fc milk`, `evoo`, `coke`, `cuppa`, `tim tams`, `chook breast`, `rump`, `rashers`), fuzzy typos outside the 46-entry table (`bannanas`, `red onoins`, `chese`), and short/vague heads whose trigram overlap with a longer canonical name is low (`milk 1L`, `macaroni`, `lentils`, `bred`). Cheapest wins in order: grow `dictionaries/shorthand.ts`, replace exact-match typos with fuzzy correction, then re-measure before touching `BAND_THRESHOLDS`.
+
+**This table is the gate.** Re-run the harness after any threshold/weight change and compare; do not tune blind.
+
 ## Part C — Catalogue strategy (specialist recommendation: **Hybrid**)
 
 For "super easy to use + customer satisfaction," neither the 152-row toy (constant no-match) nor slow hand-curation is right. Recommendation:
