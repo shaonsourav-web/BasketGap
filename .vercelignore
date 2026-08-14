@@ -1,0 +1,29 @@
+# Source / docs / memory / scratch — never bundled to Vercel
+.env
+.env.*
+.dbpass
+*.sql
+docs/
+memory/
+supabase/
+apps/
+packages/workers/
+
+# Tests
+**/*.test.ts
+**/__tests__/**
+
+# Build artefacts + caches
+node_modules/
+dist/
+coverage/
+.turbo/
+.pnpm-store/
+.tmp/
+
+# Editor + OS
+[local-tool-dir]/
+.vscode/
+.idea/
+.DS_Store
+*.swp

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["syd1"],
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+  "buildCommand": "echo no build step",
+  "functions": {
+    "api/[[...route]].ts": {
+      "memory": 1024,
+      "maxDuration": 30
+    }
+  }
+}
