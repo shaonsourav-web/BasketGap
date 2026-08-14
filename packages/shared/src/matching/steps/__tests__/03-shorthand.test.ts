@@ -22,4 +22,14 @@ describe('expandShorthand', () => {
   ])('expands %j → %j', (input, expected) => {
     expect(expandShorthand(input)).toBe(expected);
   });
+
+  it.each([
+    ['full cream milk', 'full cream milk'],
+    ['skim milk', 'skim milk'],
+    ['lite milk', 'light milk'],
+    ['full cream milk 2 L', 'full cream milk 2 L'],
+    ['skim milk 1 L', 'skim milk 1 L'],
+  ])('does not duplicate expansion tails: %j → %j', (input, expected) => {
+    expect(expandShorthand(input)).toBe(expected);
+  });
 });

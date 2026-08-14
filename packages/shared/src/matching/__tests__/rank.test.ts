@@ -44,6 +44,54 @@ describe('rankCandidates', () => {
     expect(ranked[0]!.vectorSimilarity).toBe(0.9);
   });
 
+  it('reconciles g and kg as an exact size match', () => {
+    const ranked = rankCandidates({
+      cleaned: 'beef mince',
+      brand: null,
+      sizeValue: 500,
+      sizeUom: 'g',
+      directCandidates: [
+        row({
+          id: 'a',
+          name: 'Beef Mince',
+          unitSizeValue: 0.5,
+          unitSizeUom: 'kg',
+          textSimilarity: 0.6,
+        }),
+      ],
+      vectorCandidates: [],
+    });
+    expect(ranked[0]!.sizeMatch).toBe(1);
+  });
+
+  it('reconciles ml and L as an exact size match', () => {
+    const ranked = rankCandidates({
+      cleaned: 'milk',
+      brand: null,
+      sizeValue: 2000,
+      sizeUom: 'ml',
+      directCandidates: [
+        row({ id: 'a', name: 'Milk', unitSizeValue: 2, unitSizeUom: 'L', textSimilarity: 0.6 }),
+      ],
+      vectorCandidates: [],
+    });
+    expect(ranked[0]!.sizeMatch).toBe(1);
+  });
+
+  it('keeps mass and volume incomparable', () => {
+    const ranked = rankCandidates({
+      cleaned: 'milk',
+      brand: null,
+      sizeValue: 2,
+      sizeUom: 'L',
+      directCandidates: [
+        row({ id: 'a', name: 'Milk', unitSizeValue: 2000, unitSizeUom: 'g', textSimilarity: 0.6 }),
+      ],
+      vectorCandidates: [],
+    });
+    expect(ranked[0]!.sizeMatch).toBe(0);
+  });
+
   it('rewards exact size match', () => {
     const ranked = rankCandidates({
       cleaned: 'milk',

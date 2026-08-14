@@ -1,4 +1,5 @@
 import { type MatchCandidate, RANK_WEIGHTS, type RawCandidateRow } from '../types.ts';
+import { toBaseUnit } from '../lib/units.ts';
 
 export interface RankInput {
   cleaned: string;
@@ -66,9 +67,11 @@ export function rankCandidates(input: RankInput): MatchCandidate[] {
 function computeSizeMatch(input: RankInput, row: RawCandidateRow): number {
   if (input.sizeValue == null || input.sizeUom == null) return 0;
   if (row.unitSizeValue == null || row.unitSizeUom == null) return 0;
-  if (row.unitSizeUom !== input.sizeUom) return 0;
-  const inputValue = input.sizeValue;
-  const rowValue = row.unitSizeValue;
+  const inputBase = toBaseUnit(input.sizeValue, input.sizeUom);
+  const rowBase = toBaseUnit(row.unitSizeValue, row.unitSizeUom);
+  if (rowBase.uom !== inputBase.uom) return 0;
+  const inputValue = inputBase.value;
+  const rowValue = rowBase.value;
   if (inputValue === rowValue) return 1;
   const ratio = Math.min(inputValue, rowValue) / Math.max(inputValue, rowValue);
   if (ratio > 0.95) return 0.9;

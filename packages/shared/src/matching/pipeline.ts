@@ -1,8 +1,9 @@
-import { hashCleanedInput } from './steps/09-cache.ts';
+import { buildCacheKey, hashCleanedInput } from './steps/09-cache.ts';
 import { cleanLine } from './steps/01-clean.ts';
 import { spellCorrect } from './steps/02-spell-correct.ts';
 import { expandShorthand } from './steps/03-shorthand.ts';
 import { extractQuantitySize } from './steps/04-quantity-size.ts';
+import { extractBrand } from './lib/brand.ts';
 import { directLookup } from './steps/05-direct-lookup.ts';
 import { vectorSearch } from './steps/06-vector-search.ts';
 import { rankCandidates } from './steps/07-rank.ts';
@@ -26,7 +27,14 @@ export async function matchLine(raw: string, ctx: PipelineContext): Promise<Matc
   const expanded = stepAudit(audit, 'shorthand', () => expandShorthand(corrected));
   const qty = stepAudit(audit, 'quantity-size', () => extractQuantitySize(expanded));
   const cleanedForMatch = qty.residual || expanded;
-  const cleanedInputHash = hashCleanedInput(cleanedForMatch);
+  const cleanedInputHash = hashCleanedInput(
+    buildCacheKey({
+      cleaned: cleanedForMatch,
+      sizeValue: qty.sizeValue,
+      sizeUom: qty.sizeUom,
+      quantity: qty.quantity,
+    }),
+  );
 
   const cached = await stepAuditAsync(audit, 'cache-read', () => ctx.readCache(cleanedInputHash));
   if (cached) {
@@ -44,8 +52,22 @@ export async function matchLine(raw: string, ctx: PipelineContext): Promise<Matc
     });
   }
 
+  let brand: string | null = null;
+  let nameQuery = cleanedForMatch;
+  if (ctx.loadKnownBrands) {
+    const extracted = await stepAuditAsync(audit, 'brand-extract', async () => {
+      const brands = await ctx.loadKnownBrands!();
+      return extractBrand(cleanedForMatch, new Set(brands));
+    });
+    if (extracted.brand) {
+      brand = extracted.brand;
+      // If the line was only a brand ("vegemite"), keep it as the name query.
+      if (extracted.residual) nameQuery = extracted.residual;
+    }
+  }
+
   const direct = await stepAuditAsync(audit, 'direct-lookup', () =>
-    directLookup(cleanedForMatch, null, ctx),
+    directLookup(nameQuery, brand, ctx),
   );
   const vector = await stepAuditAsync(audit, 'vector-search', () =>
     vectorSearch(cleanedForMatch, ctx),
@@ -53,8 +75,8 @@ export async function matchLine(raw: string, ctx: PipelineContext): Promise<Matc
 
   const ranked = stepAudit(audit, 'rank', () =>
     rankCandidates({
-      cleaned: cleanedForMatch,
-      brand: null,
+      cleaned: nameQuery,
+      brand,
       sizeValue: qty.sizeValue,
       sizeUom: qty.sizeUom,
       directCandidates: direct,

@@ -4,6 +4,7 @@ import type { Db } from '../db/client.ts';
 import { matchCache } from '../db/schema.ts';
 
 import { embedText } from './lib/embeddings.ts';
+import { hitsToPrior } from './lib/popularity.ts';
 import { chooseWithLlm, DEFAULT_OPENROUTER_MODEL } from './lib/openrouter.ts';
 import type {
   CachedMatch,
@@ -24,6 +25,7 @@ export interface DbContextOptions {
 
 export function createDbContext(options: DbContextOptions): PipelineContext {
   const { db, openAiKey, openRouterKey, openRouterModel } = options;
+  let knownBrandsPromise: Promise<string[]> | null = null;
 
   return {
     hasOpenAi: Boolean(openAiKey),
@@ -43,10 +45,23 @@ export function createDbContext(options: DbContextOptions): PipelineContext {
       });
     },
     loadCandidatesByName: (cleaned, brand) => loadCandidatesByName(db, cleaned, brand),
+    loadKnownBrands: () => {
+      knownBrandsPromise ??= loadKnownBrands(db);
+      return knownBrandsPromise;
+    },
     loadCandidatesByVector: (embedding) => loadCandidatesByVector(db, embedding),
     readCache: (hash) => readCache(db, hash),
     writeCache: (hash, cleaned, result) => writeCache(db, hash, cleaned, result),
   };
+}
+
+async function loadKnownBrands(db: Db): Promise<string[]> {
+  const rows = await db.execute<{ brand: string }>(sql`
+    select distinct lower(brand) as brand
+    from public.canonical_products
+    where brand is not null
+  `);
+  return rows.map((r) => r.brand);
 }
 
 async function loadCandidatesByName(
@@ -63,6 +78,7 @@ async function loadCandidatesByName(
     unit_size_value: string | null;
     unit_size_uom: string | null;
     text_similarity: number;
+    popularity_hits: number;
   }>(sql`
     select id,
            name,
@@ -77,7 +93,12 @@ async function loadCandidatesByName(
                  then similarity(lower(brand), ${brand})
                else 0
              end
-           ) as text_similarity
+           ) as text_similarity,
+           coalesce((
+             select sum(mc.hit_count)::int
+             from public.match_cache mc
+             where mc.canonical_product_id = canonical_products.id
+           ), 0) as popularity_hits
     from public.canonical_products
     where similarity(lower(name), ${cleaned}) > 0.2
        or lower(name) = ${cleaned}
@@ -92,6 +113,7 @@ async function loadCandidatesByName(
     unitSizeValue: r.unit_size_value != null ? Number.parseFloat(r.unit_size_value) : null,
     unitSizeUom: r.unit_size_uom,
     textSimilarity: r.text_similarity,
+    popularityPrior: hitsToPrior(r.popularity_hits),
   }));
 }
 
@@ -106,6 +128,7 @@ async function loadCandidatesByVector(db: Db, embedding: number[]): Promise<RawC
     unit_size_value: string | null;
     unit_size_uom: string | null;
     cosine_distance: number;
+    popularity_hits: number;
   }>(sql`
     select id,
            name,
@@ -113,7 +136,12 @@ async function loadCandidatesByVector(db: Db, embedding: number[]): Promise<RawC
            category,
            unit_size_value::text as unit_size_value,
            unit_size_uom,
-           (embedding <=> ${literal}::vector) as cosine_distance
+           (embedding <=> ${literal}::vector) as cosine_distance,
+           coalesce((
+             select sum(mc.hit_count)::int
+             from public.match_cache mc
+             where mc.canonical_product_id = canonical_products.id
+           ), 0) as popularity_hits
     from public.canonical_products
     where embedding is not null
     order by embedding <=> ${literal}::vector asc
@@ -127,6 +155,7 @@ async function loadCandidatesByVector(db: Db, embedding: number[]): Promise<RawC
     unitSizeValue: r.unit_size_value != null ? Number.parseFloat(r.unit_size_value) : null,
     unitSizeUom: r.unit_size_uom,
     vectorSimilarity: clamp01(1 - r.cosine_distance),
+    popularityPrior: hitsToPrior(r.popularity_hits),
   }));
 }
 

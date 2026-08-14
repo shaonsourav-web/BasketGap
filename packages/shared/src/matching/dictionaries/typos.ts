@@ -1,7 +1,6 @@
 export const TYPOS: Record<string, string> = {
   mlk: 'milk',
   bred: 'bread',
-  bred_loaf: 'bread loaf',
   butr: 'butter',
   buttr: 'butter',
   yougurt: 'yogurt',

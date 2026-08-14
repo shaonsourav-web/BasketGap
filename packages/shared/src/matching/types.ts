@@ -51,6 +51,8 @@ export interface PipelineContext {
   embedText: (text: string) => Promise<number[]>;
   llmChoose: (input: LlmChooseInput) => Promise<LlmChooseOutput>;
   loadCandidatesByName: (cleaned: string, brand: string | null) => Promise<RawCandidateRow[]>;
+  /** Lowercased brand names from the canonical catalogue; optional so mocked contexts stay minimal. */
+  loadKnownBrands?: () => Promise<string[]>;
   loadCandidatesByVector: (embedding: number[]) => Promise<RawCandidateRow[]>;
   readCache: (hash: string) => Promise<CachedMatch | null>;
   writeCache: (hash: string, cleaned: string, result: MatchResult) => Promise<void>;

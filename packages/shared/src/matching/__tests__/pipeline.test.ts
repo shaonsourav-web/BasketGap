@@ -142,6 +142,59 @@ describe('matchLine pipeline', () => {
     expect(result.canonicalProductId).toBe('cand-a');
   });
 
+  it('extracts a known brand and passes it to lookup and ranking', async () => {
+    const loadByName = vi.fn(async (_cleaned: string, _brand: string | null) => [
+      {
+        id: 'bega-tasty',
+        name: 'Tasty Cheese Block',
+        brand: 'Bega',
+        category: 'dairy',
+        unitSizeValue: 500,
+        unitSizeUom: 'g',
+        textSimilarity: 0.75,
+      },
+      {
+        id: 'generic-tasty',
+        name: 'Tasty Cheese Block',
+        brand: null,
+        category: 'dairy',
+        unitSizeValue: 500,
+        unitSizeUom: 'g',
+        textSimilarity: 0.75,
+      },
+    ]);
+    const ctx = buildCtx({
+      loadCandidatesByName: loadByName,
+      loadKnownBrands: vi.fn(async () => ['bega']),
+    });
+    const result = await matchLine('bega tasty cheese block 500g', ctx);
+    // Brand removed from the name query, passed as its own argument.
+    expect(loadByName).toHaveBeenCalledWith('tasty cheese block', 'bega');
+    // Branded candidate outranks the otherwise-identical generic one.
+    expect(result.canonicalProductId).toBe('bega-tasty');
+    expect(result.top!.brandMatch).toBe(1);
+  });
+
+  it('differently sized lines do not share a cache entry', async () => {
+    const ctx = buildCtx({
+      loadCandidatesByName: vi.fn(async () => [
+        {
+          id: 'milk-generic',
+          name: 'Milk',
+          brand: null,
+          category: 'dairy',
+          unitSizeValue: 2,
+          unitSizeUom: 'L',
+          textSimilarity: 1.0,
+        },
+      ]),
+    });
+    const first = await matchLine('milk 1L', ctx);
+    const second = await matchLine('milk 3L', ctx);
+    expect(first.cleanedInputHash).not.toBe(second.cleanedInputHash);
+    expect(second.decidedBy).not.toBe('cache');
+  });
+
   it('matchBasket skips blank lines', async () => {
     const ctx = buildCtx();
     const out = await matchBasket(['', '   ', 'something'], ctx);
