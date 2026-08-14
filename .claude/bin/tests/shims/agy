@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+#
+# Fake `agy` for test-bridges.sh. Never calls a model, never costs a token.
+# Behaviour is selected by FAKE_AGY_CASE; argv is logged to FAKE_AGY_ARGV_LOG
+# so tests can assert the bridge passes an @file reference, not prompt text.
+
+set -u
+
+if [[ -n "${FAKE_AGY_ARGV_LOG:-}" ]]; then
+  printf '%s\n' "$@" > "$FAKE_AGY_ARGV_LOG"
+fi
+
+case "${FAKE_AGY_CASE:-ok}" in
+  ok)
+    printf '%s\n' '{"status":"SUCCESS","response":"BRIDGE-OK first\nBRIDGE-OK second"}'
+    ;;
+  noisy)
+    echo "fake-agy: unrelated plugin warning on stderr" >&2
+    printf '%s\n' '{"status":"SUCCESS","response":"CLEAN-ANSWER"}'
+    ;;
+  empty)
+    printf '%s\n' '{"status":"SUCCESS","response":""}'
+    ;;
+  whitespace)
+    printf '%s\n' '{"status":"SUCCESS","response":"   \n\t  "}'
+    ;;
+  malformed)
+    printf '%s\n' '{"status":"SUCCESS","response":"unterminated'
+    ;;
+  missing-field)
+    printf '%s\n' '{"status":"SUCCESS","conversationId":"abc123"}'
+    ;;
+  not-object)
+    printf '%s\n' '"just a string"'
+    ;;
+  exit-nonzero)
+    echo "fake-agy: authentication required" >&2
+    exit 7
+    ;;
+  *)
+    echo "fake-agy: unknown FAKE_AGY_CASE '${FAKE_AGY_CASE:-}'" >&2
+    exit 99
+    ;;
+esac
+
+exit 0

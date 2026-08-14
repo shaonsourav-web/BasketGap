@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+#
+# Fake `codex` for test-bridges.sh. Never calls a model, never costs a token.
+# Behaviour is selected by FAKE_CODEX_CASE; argv is logged to
+# FAKE_CODEX_ARGV_LOG and stdin to FAKE_CODEX_STDIN_LOG, so tests can assert
+# the prompt arrives on stdin and never on argv.
+
+set -u
+
+if [[ -n "${FAKE_CODEX_ARGV_LOG:-}" ]]; then
+  printf '%s\n' "$@" > "$FAKE_CODEX_ARGV_LOG"
+fi
+
+STDIN_CONTENT="$(cat)"
+if [[ -n "${FAKE_CODEX_STDIN_LOG:-}" ]]; then
+  printf '%s\n' "$STDIN_CONTENT" > "$FAKE_CODEX_STDIN_LOG"
+fi
+
+case "${FAKE_CODEX_CASE:-ok}" in
+  ok)
+    echo "fake-codex: MCP plugin HTTP 500 noise on stderr" >&2
+    printf '%s\n' "$STDIN_CONTENT"
+    ;;
+  exit-nonzero)
+    echo "fake-codex: stream error: unexpected status 401 Unauthorized" >&2
+    exit 5
+    ;;
+  *)
+    echo "fake-codex: unknown FAKE_CODEX_CASE '${FAKE_CODEX_CASE:-}'" >&2
+    exit 99
+    ;;
+esac
+
+exit 0

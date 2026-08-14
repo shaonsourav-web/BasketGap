@@ -8,61 +8,70 @@ agent-delegation hierarchy, the verification loop, and day-to-day commands.
 
 ## Agent roster and delegation
 
-The active Claude Code session is the **Director**. Intended driver: **Fable
-5, high effort** (set with `/model` — this file can't force the session's
-own model, so confirm it's actually set before relying on this). The
-Director plans, decomposes work into tasks sized to the tiers below,
-dispatches them, and reviews every result before accepting it. It does not
-do bulk implementation itself.
+The active Claude Code session is the **Director**, defined in
+`.claude/agents/director.md` (Fable 5, high effort — set the session model
+with `/model`, this file can't force it). Doctrine, operator-set 14 Aug 2026:
+the Director never does the work itself, is the fleet's sole judge (verdicts
+are never delegated), and owns the final synthesis. It analyses each job,
+distributes it to the tier below, verifies what comes back against ground
+truth (runs the actual commands, opens the actual files — never trusts a
+self-report), and re-dispatches rather than patches when work falls short.
 
-| Tier                | Model            | Effort                                        | Use for                                                                                                          | Dispatch mechanism                            |
-| ------------------- | ---------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| Plan/review         | Fable 5          | high                                          | Planning, task breakdown, reviewing and accepting/rejecting every other tier's output                            | The Director's own reasoning — no dispatch    |
-| Complex (Anthropic) | Opus 5           | high                                          | Multi-step implementation needing strong judgment — e.g. matching-engine pipeline changes, new retailer adapters | `Agent` tool, `subagent_type: "opus-heavy"`   |
-| Complex (OpenAI)    | GPT-5.6 Sol      | high                                          | Same tier as Opus 5 — parallel attempt or second opinion                                                         | `codex exec` (recipe below)                   |
-| Lighter (Anthropic) | Sonnet 5         | high                                          | Small, well-scoped implementation or research tasks                                                              | `Agent` tool, `subagent_type: "sonnet-light"` |
-| Lighter (OpenAI)    | GPT-5.6 Terra    | high                                          | Same tier as Sonnet 5                                                                                            | `codex exec` (recipe below)                   |
-| Heavy/bulk (OpenAI) | GPT-5.6 Luna     | max                                           | High-volume mechanical work: bulk fixture generation, large refactors across adapters                            | `codex exec` (recipe below)                   |
-| Heavy/bulk (Google) | Gemini 3.7 Flash | high (ceiling — no `max` exists for this CLI) | Same tier as Luna, second implementation or cross-check                                                          | `agy -p` (recipe below)                       |
+| Tier                            | Engines                                                              | Route here                                                                                                                        |
+| ------------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **Complex agentic work**        | `deep-builder` (Opus 5, high) · `codex-sol` (gpt-5.6-sol, high)      | Matching-engine pipeline changes, new retailer adapters, multi-file refactors, subtle-mistake-is-expensive work                   |
+| **Low-complexity agentic work** | `bulk-worker` (Sonnet 5, high) · `codex-terra` (gpt-5.6-terra, high) | Well-specified execution: fixture generation, mechanical sweeps across adapters, scaffolding                                      |
+| **Heavy load, less agentic**    | `codex-luna` (gpt-5.6-luna, max)                                     | Big single-shot reasoning: long-document crunching, deep analysis — thinking volume, not tool-driving                             |
+| **Antigravity — fits anywhere** | `agy-worker` (Gemini via `agy`, headless)                            | Wherever it fits; leans research. Third model family for opinions. **No sandbox on this route — read-and-reason dispatches only** |
+| **Web research**                | `search-scout` (Sonnet 5, high)                                      | Retailer page structure, pricing-API shapes, fact verification                                                                    |
 
-Codex CLI and Antigravity CLI (`agy`) are both already installed and
-authenticated on this machine (ChatGPT login for Codex, Google account login
-for `agy`) — no API key involved for either, confirmed working as of
-2026-08-14 in the `remotejobcheck` repo. Same binaries, same auth, reusable
-here without re-running any setup.
+Full agent definitions are in `.claude/agents/`. Invoke with the `Agent`
+tool and the matching `subagent_type`.
 
-### Dispatch recipes
+**Routing principles** (operator doctrine, 14 Aug 2026 — there is no
+sol→terra→luna escalation ladder; match tier to complexity directly):
 
-Run all of these with Bash `run_in_background: true` so the dispatched
-model's full transcript doesn't fill the Director's context — read back only
-the file passed to `-o` (or the redirected file for `agy`), once the
-background job completes. Use `-s read-only` instead of `workspace-write`
-for a review/analysis-only dispatch.
+1. Low-complexity work on the complex tier wastes money; complex work on the
+   low tier wastes a round trip.
+2. Independence is the point of the non-Claude engines — for a real second
+   opinion, send the problem **without** the proposed answer.
+3. External facts go to `search-scout` or `agy-worker` first; builders never
+   guess at them.
+4. Parallelise independent dispatches — multiple `Agent` calls in one message.
+5. Surface disagreement between engines; never silently pick one.
+
+### Dispatch mechanism: bridge scripts, not raw CLI calls
+
+The Codex and Antigravity tiers dispatch through tested bridge scripts —
+`.claude/bin/codex-bridge.sh` and `.claude/bin/agy-bridge.sh` — not raw
+`codex exec` / `agy` invocations. The bridges handle prompt-file staging
+(never argv — quotes/newlines get mangled), stdout/stderr separation, and
+strict failure semantics (a `"status":"SUCCESS"` envelope with no usable
+`response` field is still a failed dispatch). Their own test suite
+(`.claude/bin/tests/test-bridges.sh`, 63 assertions against fake shims, no
+auth needed) passed unmodified on this local machine, confirmed
+2026-08-14.
 
 ```
-# Complex / OpenAI tier (Sol)
-codex exec -m gpt-5.6-sol -c model_reasoning_effort=high -s workspace-write \
-  -o <scratch-file> "<task>"
+# Codex tiers (sol/terra/luna) — prompt passed as a FILE, not inline
+.claude/bin/codex-bridge.sh <gpt-5.6-sol|gpt-5.6-terra|gpt-5.6-luna> <effort> <read-only|workspace-write> <prompt-file>
 
-# Lighter / OpenAI tier (Terra)
-codex exec -m gpt-5.6-terra -c model_reasoning_effort=high -s workspace-write \
-  -o <scratch-file> "<task>"
-
-# Heavy / OpenAI tier (Luna)
-codex exec -m gpt-5.6-luna -c model_reasoning_effort=max -s workspace-write \
-  -o <scratch-file> "<task>"
-
-# Heavy / Google tier (Gemini 3.7 Flash, via Antigravity CLI)
-"%LOCALAPPDATA%\agy\bin\agy.exe" -p "<task>" --model gemini-3.7-flash-high \
-  --sandbox --dangerously-skip-permissions --output-format text \
-  > <scratch-file>
+# Antigravity tier — prompt passed as a FILE, not inline
+.claude/bin/agy-bridge.sh <low|medium|high> <prompt-file>
 ```
 
-`--dangerously-skip-permissions` is required for any `agy` dispatch that
-writes files or runs shell commands — there's no live terminal to answer a
-permission prompt, so without it a real task just hangs until `agy`'s own
-timeout. `--sandbox` is the safety boundary in exchange for that — keep both
-flags together, never skip permissions without the sandbox.
+Both are already installed and authenticated on this machine — Codex via
+ChatGPT login, `agy` via free Google account login, no API key either way.
+`codex` is on PATH; `agy` needs `%LOCALAPPDATA%\agy\bin` on PATH (the
+installer added it to the registry — a fresh terminal picks it up
+automatically; an already-open shell needs
+`export PATH="$PATH:[agy-install-dir]"` for that session).
+
+`agy-bridge.sh` always runs `--dangerously-skip-permissions` (headless mode
+has no terminal to answer a permission prompt) with no sandbox — its
+`--sandbox` argument form is unverified upstream, so it's deliberately not
+wired in. Prefer read-and-report prompts on this route; see
+`agy-worker.md` for the full failure discipline.
 
 ## The verification loop (non-negotiable)
 
@@ -85,13 +94,13 @@ No delegated task, from any tier, is accepted until the Director has:
    `docs/decisions.md`, and updated `README.md`'s Status section if the
    change ships new user-facing capability.
 
-If any of these fail, the task is not accepted. It goes back to the same
-tier with specific feedback, or escalates one tier up (Terra → Sol, Sonnet →
-Opus) if the failure suggests the task was under-resourced rather than just
-buggy. The Director may fix genuinely trivial issues itself (a typo, a
-missing import) but must say so when reporting back; anything larger goes
-back to the dispatching tier instead of being silently absorbed into the
-Director's own work.
+If any of these fail, the task is not accepted — it goes back to the same
+tier, or a different tier at the same complexity level, with specific
+feedback on what failed and what "done" requires (there is no fixed
+escalation ladder; match the re-dispatch to what the failure actually
+suggests was missing). Per the Director's own doctrine (`director.md`), it
+never patches the work itself, even a trivial fix — that turns it into a
+worker and hides the failure. Everything goes back to a dispatching tier.
 
 ## Commands
 
