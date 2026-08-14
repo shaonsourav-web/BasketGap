@@ -1,3 +1,4 @@
+import { fetchExternal, type ExternalFetchInit } from '../../lib/fetch.ts';
 import type { LlmChooseInput, LlmChooseOutput } from '../types.ts';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -36,7 +37,7 @@ Shortlist:
 ${shortlistText}
 
 Return the best match as strict JSON.`;
-  const init: RequestInit = {
+  const init: ExternalFetchInit = {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -55,7 +56,7 @@ Return the best match as strict JSON.`;
     }),
   };
   if (options.signal) init.signal = options.signal;
-  const response = await fetch(OPENROUTER_URL, init);
+  const response = await fetchExternal(OPENROUTER_URL, init);
   if (!response.ok) {
     const text = await response.text().catch(() => '');
     throw new Error(`OpenRouter chat failed (${response.status}): ${text.slice(0, 240)}`);

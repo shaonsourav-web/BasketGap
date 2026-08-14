@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { loadEnv } from '../lib/env.ts';
-import { captureException } from '../lib/observability.ts';
-import { createSqlClient } from '../db/client.ts';
+import { loadEnv } from '@basketgap/shared/lib/env';
+import { captureException } from '@basketgap/shared/lib/observability';
+import { createSqlClient } from '@basketgap/shared/db/client';
 
 type PingResult = {
   ok: true;

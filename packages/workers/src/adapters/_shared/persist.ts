@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 
-import type { Db } from '../../db/client.ts';
-import { catalogues, specials } from '../../db/schema.ts';
+import type { Db } from '@basketgap/shared/db/client';
+import { catalogues, specials } from '@basketgap/shared/db/schema';
 
 import type { IngestResult, ParsedCatalogue } from './types.ts';
 

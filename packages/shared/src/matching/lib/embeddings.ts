@@ -1,3 +1,5 @@
+import { fetchExternal, type ExternalFetchInit } from '../../lib/fetch.ts';
+
 const OPENAI_EMBEDDINGS_URL = 'https://api.openai.com/v1/embeddings';
 const DEFAULT_MODEL = 'text-embedding-3-small';
 export const EMBEDDING_DIM = 1536;
@@ -17,7 +19,7 @@ export async function embedText(text: string, options: EmbedOptions): Promise<nu
     model: options.model ?? DEFAULT_MODEL,
     encoding_format: 'float',
   };
-  const init: RequestInit = {
+  const init: ExternalFetchInit = {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -26,7 +28,7 @@ export async function embedText(text: string, options: EmbedOptions): Promise<nu
     body: JSON.stringify(body),
   };
   if (options.signal) init.signal = options.signal;
-  const response = await fetch(OPENAI_EMBEDDINGS_URL, init);
+  const response = await fetchExternal(OPENAI_EMBEDDINGS_URL, init);
   if (!response.ok) {
     const text = await response.text().catch(() => '');
     throw new Error(`OpenAI embeddings failed (${response.status}): ${text.slice(0, 240)}`);

@@ -1,11 +1,11 @@
 import { inArray } from 'drizzle-orm';
 
-import { createDb, createSqlClient, type Db, type SqlClient } from '../db/client.ts';
-import { canonicalProducts } from '../db/schema.ts';
-import { loadEnv } from '../lib/env.ts';
-import { embedText } from '../matching/lib/embeddings.ts';
-import { CANONICAL_SEED, type SeedEntry } from '../matching/seed/canonical-seed.ts';
-import { deterministicUuid } from '../matching/seed/uuid.ts';
+import { createDb, createSqlClient, type Db, type SqlClient } from '@basketgap/shared/db/client';
+import { canonicalProducts } from '@basketgap/shared/db/schema';
+import { loadEnv } from '@basketgap/shared/lib/env';
+import { embedText } from '@basketgap/shared/matching/lib/embeddings';
+import { CANONICAL_SEED, type SeedEntry } from '@basketgap/shared/matching/seed/canonical-seed';
+import { deterministicUuid } from '@basketgap/shared/matching/seed/uuid';
 
 export interface SeedCanonicalOptions {
   dryRun: boolean;

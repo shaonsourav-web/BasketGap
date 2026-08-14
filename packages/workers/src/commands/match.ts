@@ -1,9 +1,9 @@
 import { readFile } from 'node:fs/promises';
 
-import { createDb, createSqlClient } from '../db/client.ts';
-import { loadEnv } from '../lib/env.ts';
-import { createDbContext } from '../matching/db.ts';
-import { matchBasket, matchLine } from '../matching/pipeline.ts';
+import { createDb, createSqlClient } from '@basketgap/shared/db/client';
+import { loadEnv } from '@basketgap/shared/lib/env';
+import { createDbContext } from '@basketgap/shared/matching/db';
+import { matchBasket, matchLine } from '@basketgap/shared/matching/pipeline';
 
 interface MatchArgs {
   line: string | null;

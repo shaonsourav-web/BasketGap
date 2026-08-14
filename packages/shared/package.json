@@ -1,0 +1,33 @@
+{
+  "name": "@basketgap/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./db": "./src/db/index.ts",
+    "./matching": "./src/matching/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:pull": "tsx --env-file=../../.env.local node_modules/.bin/drizzle-kit pull"
+  },
+  "dependencies": {
+    "@sentry/node": "10.53.1",
+    "drizzle-orm": "0.45.2",
+    "postgres": "3.4.9",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "drizzle-kit": "0.31.10",
+    "tsx": "4.21.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.5"
+  }
+}

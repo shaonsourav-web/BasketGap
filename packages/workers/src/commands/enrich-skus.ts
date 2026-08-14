@@ -1,11 +1,11 @@
 import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
 
-import { createDb, createSqlClient, type Db } from '../db/client.ts';
-import { retailerSkus, specials } from '../db/schema.ts';
-import { loadEnv } from '../lib/env.ts';
-import { createDbContext } from '../matching/db.ts';
-import { matchLine } from '../matching/pipeline.ts';
-import type { ConfidenceBand } from '../matching/types.ts';
+import { createDb, createSqlClient, type Db } from '@basketgap/shared/db/client';
+import { retailerSkus, specials } from '@basketgap/shared/db/schema';
+import { loadEnv } from '@basketgap/shared/lib/env';
+import { createDbContext } from '@basketgap/shared/matching/db';
+import { matchLine } from '@basketgap/shared/matching/pipeline';
+import type { ConfidenceBand } from '@basketgap/shared/matching/types';
 
 interface EnrichArgs {
   retailer: 'coles' | 'woolworths' | null;

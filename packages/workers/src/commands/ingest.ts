@@ -3,7 +3,7 @@ import { ingestColesWeb } from '../adapters/coles-web/index.ts';
 import { ingestWooliesPdf } from '../adapters/woolies-pdf/index.ts';
 import { ingestWooliesWeb } from '../adapters/woolies-web/index.ts';
 import type { IngestOptions, IngestResult } from '../adapters/_shared/types.ts';
-import { captureException } from '../lib/observability.ts';
+import { captureException } from '@basketgap/shared/lib/observability';
 
 const USAGE = `Usage: workers ingest <adapter> [options]
 

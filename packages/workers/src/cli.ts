@@ -3,7 +3,7 @@ import { runIngest } from './commands/ingest.ts';
 import { runMatch } from './commands/match.ts';
 import { runPing } from './commands/ping.ts';
 import { runSeedCanonical } from './commands/seed-canonical.ts';
-import { initObservability } from './lib/observability.ts';
+import { initObservability } from '@basketgap/shared/lib/observability';
 
 const USAGE = `Usage: workers <command>
 
