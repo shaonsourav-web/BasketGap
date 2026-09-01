@@ -10,6 +10,8 @@ import { deterministicUuid } from '@basketgap/shared/matching/seed/uuid';
 export interface SeedCanonicalOptions {
   dryRun: boolean;
   forceRefresh: boolean;
+  /** Seed without embeddings (null vectors); the engine then runs trigram-only. */
+  noEmbeddings?: boolean;
   db?: Db;
   sql?: SqlClient;
 }
@@ -26,7 +28,8 @@ export interface SeedCanonicalResult {
 
 export async function seedCanonical(options: SeedCanonicalOptions): Promise<SeedCanonicalResult> {
   const env = loadEnv();
-  if (!env.OPENAI_API_KEY && !options.dryRun) {
+  const withEmbeddings = !options.noEmbeddings;
+  if (withEmbeddings && !env.OPENAI_API_KEY && !options.dryRun) {
     return {
       ok: false,
       totalSeed: CANONICAL_SEED.length,
@@ -34,7 +37,8 @@ export async function seedCanonical(options: SeedCanonicalOptions): Promise<Seed
       inserted: 0,
       refreshed: 0,
       skipped: true,
-      reason: 'OPENAI_API_KEY is required to embed seed entries (use --dry-run to plan)',
+      reason:
+        'OPENAI_API_KEY is required to embed seed entries (use --dry-run to plan, or --no-embeddings for trigram-only)',
     };
   }
 
@@ -73,31 +77,28 @@ export async function seedCanonical(options: SeedCanonicalOptions): Promise<Seed
     let inserted = 0;
     let refreshed = 0;
     for (const entry of toInsert) {
-      const embedInput = embedInputFor(entry);
-      const embedding = await embedText(embedInput, { apiKey: env.OPENAI_API_KEY! });
+      const embedding = withEmbeddings
+        ? await embedText(embedInputFor(entry), { apiKey: env.OPENAI_API_KEY! })
+        : null;
       const existed = existingSet.has(entry.id);
+      const common = {
+        name: entry.name,
+        brand: entry.brand,
+        category: entry.category,
+        unitSizeValue: entry.unitSizeValue != null ? String(entry.unitSizeValue) : null,
+        unitSizeUom: entry.unitSizeUom,
+        description: entry.description,
+      };
       await db
         .insert(canonicalProducts)
-        .values({
-          id: entry.id,
-          name: entry.name,
-          brand: entry.brand,
-          category: entry.category,
-          unitSizeValue: entry.unitSizeValue != null ? String(entry.unitSizeValue) : null,
-          unitSizeUom: entry.unitSizeUom,
-          description: entry.description,
-          embedding,
-        })
+        .values({ id: entry.id, ...common, embedding })
         .onConflictDoUpdate({
           target: canonicalProducts.id,
           set: {
-            name: entry.name,
-            brand: entry.brand,
-            category: entry.category,
-            unitSizeValue: entry.unitSizeValue != null ? String(entry.unitSizeValue) : null,
-            unitSizeUom: entry.unitSizeUom,
-            description: entry.description,
-            embedding,
+            ...common,
+            // A no-embeddings refresh must not wipe embeddings a keyed seed
+            // wrote earlier, so only overwrite when we actually embedded.
+            ...(withEmbeddings ? { embedding } : {}),
             updatedAt: new Date(),
           },
         });
@@ -112,9 +113,9 @@ export async function seedCanonical(options: SeedCanonicalOptions): Promise<Seed
       inserted,
       refreshed,
       skipped: false,
-      reason: options.forceRefresh
-        ? 'force-refresh: embedded + upserted'
-        : 'new + missing entries embedded + inserted',
+      reason: `${options.forceRefresh ? 'force-refresh: upserted' : 'new + missing entries inserted'}${
+        withEmbeddings ? ' with embeddings' : ' without embeddings (trigram-only)'
+      }`,
     };
   } finally {
     if (shouldClose) {
@@ -145,7 +146,8 @@ function embedInputFor(entry: SeedEntry): string {
 export async function runSeedCanonical(argv: string[]): Promise<number> {
   const dryRun = argv.includes('--dry-run');
   const forceRefresh = argv.includes('--force-refresh');
-  const result = await seedCanonical({ dryRun, forceRefresh });
+  const noEmbeddings = argv.includes('--no-embeddings');
+  const result = await seedCanonical({ dryRun, forceRefresh, noEmbeddings });
   process.stdout.write(`${JSON.stringify(result)}\n`);
   return result.ok ? 0 : 1;
 }
