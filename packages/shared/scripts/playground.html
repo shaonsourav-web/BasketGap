@@ -221,6 +221,62 @@
     font-size: 13px;
     padding: 20px 0;
   }
+
+  .offers {
+    margin-top: 10px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .offer {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 7px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 12.5px;
+  }
+
+  .offer .store {
+    font-weight: 700;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .offer.coles .store {
+    color: #e0596b;
+  }
+
+  .offer.woolworths .store {
+    color: var(--green);
+  }
+
+  .offer .now {
+    font-family: var(--mono);
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .offer .was {
+    font-family: var(--mono);
+    color: var(--text-dim);
+    text-decoration: line-through;
+  }
+
+  .offer .promo {
+    color: var(--amber);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .no-offer {
+    color: var(--text-dim);
+    font-size: 12px;
+    font-style: italic;
+  }
 </style>
 
 <div class="wrap">
@@ -232,7 +288,8 @@
 
   <div class="banner">
     <strong>Offline deterministic mode</strong> — no embeddings, no LLM. This is the engine's floor,
-    not its ceiling.
+    not its ceiling. Prices shown are <strong>demo data</strong>; real offers come from ingested
+    catalogues.
   </div>
 
   <textarea id="lines" spellcheck="false">
@@ -284,6 +341,23 @@ coke zero 1.25l</textarea
       ? `<div class="picked">${escapeHtml(r.picked)}</div>`
       : `<div class="picked none">no confident match</div>`;
 
+    const offersHtml = r.picked
+      ? `<div class="offers">${
+          r.offers.length
+            ? r.offers
+                .map(
+                  (o) =>
+                    `<span class="offer ${o.retailer}"><span class="store">${escapeHtml(
+                      o.retailer,
+                    )}</span><span class="now">$${o.specialPrice.toFixed(2)}</span><span class="was">$${o.regularPrice.toFixed(
+                      2,
+                    )}</span><span class="promo">${escapeHtml(o.promoLabel)}</span></span>`,
+                )
+                .join('')
+            : '<span class="no-offer">no current specials at either store</span>'
+        }</div>`
+      : '';
+
     const candidatesHtml = r.candidates.length
       ? `<div class="candidates">${r.candidates
           .map(
@@ -307,6 +381,7 @@ coke zero 1.25l</textarea
             <span class="chip ${r.band}">${bandLabel[r.band] || r.band}</span>
           </div>
         </div>
+        ${offersHtml}
         ${candidatesHtml}
       </div>
     `;

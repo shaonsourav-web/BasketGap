@@ -26,6 +26,13 @@ interface CandidateView {
   score: number;
 }
 
+interface DemoOffer {
+  retailer: 'coles' | 'woolworths';
+  specialPrice: number;
+  regularPrice: number;
+  promoLabel: string;
+}
+
 interface LineResult {
   input: string;
   picked: string | null;
@@ -33,6 +40,38 @@ interface LineResult {
   decidedBy: string;
   score: number;
   candidates: CandidateView[];
+  offers: DemoOffer[];
+}
+
+/**
+ * Deterministic fake offers so the playground can demo the full
+ * type → match → both-store price → promo flow with no database.
+ * Real offers come from ingested catalogues via @basketgap/shared/pricing.
+ */
+function demoOffersFor(canonicalProductId: string | null): DemoOffer[] {
+  if (!canonicalProductId) return [];
+  let h = 0;
+  for (const ch of canonicalProductId) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const offers: DemoOffer[] = [];
+  const regular = 2 + (h % 900) / 100; // $2.00–$10.99
+  if (h % 5 < 2) {
+    offers.push({
+      retailer: 'coles',
+      regularPrice: Math.round(regular * 100) / 100,
+      specialPrice: Math.round(regular * 50) / 100,
+      promoLabel: '1/2 Price',
+    });
+  }
+  if ((h >> 3) % 5 < 2) {
+    const woolRegular = regular * 1.05;
+    offers.push({
+      retailer: 'woolworths',
+      regularPrice: Math.round(woolRegular * 100) / 100,
+      specialPrice: Math.round(woolRegular * 70) / 100,
+      promoLabel: 'Prices Dropped',
+    });
+  }
+  return offers;
 }
 
 async function matchLines(lines: string[]): Promise<LineResult[]> {
@@ -41,9 +80,10 @@ async function matchLines(lines: string[]): Promise<LineResult[]> {
   for (const line of lines) {
     if (!line.trim()) continue;
     const result = await matchLine(line, ctx);
+    const accepted = result.band !== 'needs_attention';
     results.push({
       input: line,
-      picked: result.band === 'needs_attention' ? null : (result.top?.name ?? null),
+      picked: accepted ? (result.top?.name ?? null) : null,
       band: result.band,
       decidedBy: result.decidedBy,
       score: Math.round((result.top?.finalScore ?? 0) * 1000) / 1000,
@@ -52,6 +92,7 @@ async function matchLines(lines: string[]): Promise<LineResult[]> {
         brand: c.brand,
         score: Math.round(c.finalScore * 1000) / 1000,
       })),
+      offers: accepted ? demoOffersFor(result.canonicalProductId) : [],
     });
   }
   return results;
