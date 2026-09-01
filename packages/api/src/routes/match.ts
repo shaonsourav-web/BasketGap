@@ -21,8 +21,6 @@ export const MatchRequestSchema = z.object({
     .optional(),
 });
 
-export type MatchRequest = z.infer<typeof MatchRequestSchema>;
-
 export interface MatchRouteDeps {
   getContext: () => PipelineContext;
   getMaxLlmCalls: () => number;

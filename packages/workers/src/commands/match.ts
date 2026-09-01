@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 
 import { createDb, createSqlClient } from '@basketgap/shared/db/client';
 import { loadEnv } from '@basketgap/shared/lib/env';
-import { createDbContext } from '@basketgap/shared/matching/db';
+import { createDbContextFromEnv } from '@basketgap/shared/matching/db';
 import { matchBasket, matchLine } from '@basketgap/shared/matching/pipeline';
 
 interface MatchArgs {
@@ -34,12 +34,7 @@ export async function runMatch(argv: string[]): Promise<number> {
   const sql = createSqlClient(env.DATABASE_URL);
   const db = createDb(sql);
   try {
-    const ctx = createDbContext({
-      db,
-      openAiKey: env.OPENAI_API_KEY,
-      openRouterKey: env.OPENROUTER_API_KEY,
-      openRouterModel: env.OPENROUTER_MODEL,
-    });
+    const ctx = createDbContextFromEnv(db, env);
     if (args.line) {
       const result = await matchLine(args.line, ctx);
       process.stdout.write(`${JSON.stringify(result)}\n`);

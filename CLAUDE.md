@@ -83,10 +83,10 @@ No delegated task, from any tier, is accepted until the Director has:
    repo root (or the equivalent scoped command inside `packages/workers` if
    the task only touched that package).
 3. If the task touched the matching pipeline, confirmed the degradation
-   paths still hold: trigram-only with no `OPENAI_API_KEY`, rank-only with
-   no `OPENROUTER_API_KEY`, fully offline deterministic with neither. This
-   is documented, load-bearing behavior — a change that quietly requires
-   both keys to function is a regression, not an improvement.
+   path still holds: with no `GEMINI_API_KEY` the engine runs trigram-only
+   and rank-only, i.e. fully offline deterministic. This is documented,
+   load-bearing behavior — a change that quietly requires the key to
+   function is a regression, not an improvement.
 4. Actually exercised the change — run the relevant `workers` CLI command
    against real or fixture data (`pnpm --filter @basketgap/workers ingest ...`,
    `... match --line "..."`, etc.), not just read the code.

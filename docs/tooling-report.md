@@ -5,6 +5,12 @@ Source spec: `BasketGap.md`
 
 This report is research only. It does not install tooling or implement application code.
 
+> **Superseded on the LLM/embeddings sections (2026-09-02).** The OpenRouter-gateway and
+> OpenAI-embeddings recommendations below are the 2026-05 research position and are no longer
+> what ships. The owner decision is a single Gemini provider — `gemini-2.5-flash` for the LLM
+> fallback and `gemini-embedding-001` at 1536 dims for embeddings. See `docs/decisions.md`,
+> entry 2026-09-02. Everything else in this report still stands.
+
 ## Section 1 — Current Stable Tooling (What To Use Today)
 
 ### Baseline Runtime And Monorepo

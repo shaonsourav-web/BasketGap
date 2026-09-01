@@ -16,7 +16,7 @@ Hand over a green API package: `packages/api/` deployed to Vercel production as 
 
 - **Framework: Hono on Vercel Functions** with the `hono/vercel` adapter. Catch-all `api/[[...route]].ts` mounts the Hono app at basePath `/api`. Middleware composition (CORS → request-id → request-log → rate-limit → error-handler) before route dispatch.
 - **Surgical lift to `packages/shared/`**: moves `src/db/{client,schema}.ts`, `src/lib/{env,observability}.ts`, the entire `src/matching/` tree, and `drizzle.config.ts` + `drizzle-kit` dev dep. Workers retains CLIs (`cli.ts`, `commands/`) and ingestion adapters; everything else is re-imported via `@basketgap/shared`. API imports the same.
-- **Rate limiting: Upstash Redis** via Vercel Marketplace. `@upstash/ratelimit` sliding-window — 30 requests per 60s per `(ip, device_id)` key. Final backstop is OpenAI + OpenRouter dashboard spending caps.
+- **Rate limiting: Upstash Redis** via Vercel Marketplace. `@upstash/ratelimit` sliding-window — 30 requests per 60s per `(ip, device_id)` key. Final backstop is the Google AI Studio / Cloud billing spending cap.
 - **Endpoint shape**: single `POST /api/match` with `{ lines: string[1..100], postcode?: string }`. Returns `{ results: MatchResult[], stats: { cached: number, llm_calls: number, latency_ms: number, request_id: string } }`.
 - **Auth strategy: none** (guest-first). Client supplies `X-Device-Id` header (UUID v4 it generates and persists locally). Rate-limit key is `(client_ip, device_id)`. Missing device-id is accepted but loses per-device fairness.
 - **Input caps** (enforced before any DB/external call): each line ≤200 chars, ≤100 lines per request, total body ≤32 KB. LLM calls capped at 10 per request (env-overridable `MAX_LLM_CALLS_PER_REQUEST`).
@@ -80,7 +80,7 @@ Hand over a green API package: `packages/api/` deployed to Vercel production as 
 | `src/lib/env.ts`                   | API-specific env, extends shared `BaseEnvSchema`                                                                                                                                                                                          |
 | `src/lib/hash.ts`                  | Daily-rotated salt sha256 for IPs/device IDs                                                                                                                                                                                              |
 | `src/lib/sentry.ts`                | One-time `Sentry.init` guarded by global flag                                                                                                                                                                                             |
-| `src/__tests__/match.test.ts`      | Endpoint tests with mocked DB/Upstash/OpenAI/OpenRouter                                                                                                                                                                                   |
+| `src/__tests__/match.test.ts`      | Endpoint tests with mocked DB/Upstash/Gemini                                                                                                                                                                                              |
 | `src/__tests__/rate-limit.test.ts` | Middleware tests with mocked Upstash                                                                                                                                                                                                      |
 | `src/__tests__/cors.test.ts`       | Allow/deny origin paths                                                                                                                                                                                                                   |
 
@@ -119,7 +119,7 @@ Hand over a green API package: `packages/api/` deployed to Vercel production as 
 
 1. Vercel project `basketgap-api` created in team `team_RL7l6U4gJrlPx1yP9gkfRPAx`.
 2. Repo linked (Vercel git integration; root dir = `packages/api`).
-3. Env vars set in Vercel dashboard: `DATABASE_URL`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL` (optional), `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `ALLOWED_ORIGINS`, `SENTRY_DSN_API` (optional), `MAX_LLM_CALLS_PER_REQUEST` (optional, defaults to 10).
+3. Env vars set in Vercel dashboard: `DATABASE_URL`, `GEMINI_API_KEY`, `GEMINI_LLM_MODEL` (optional), `GEMINI_EMBEDDING_MODEL` (optional), `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `ALLOWED_ORIGINS`, `SENTRY_DSN_API` (optional), `MAX_LLM_CALLS_PER_REQUEST` (optional, defaults to 10).
 4. Upstash Redis instance provisioned via Vercel Marketplace; URL/token populated as Vercel env vars (Marketplace integration does this automatically).
 5. Preview deployment succeeds (`mcp__plugin_vercel_vercel__deploy_to_vercel`).
 6. External `curl https://<preview-url>/api/match -d '{"lines":["milk 2L"]}'` returns 200.
@@ -129,7 +129,7 @@ Hand over a green API package: `packages/api/` deployed to Vercel production as 
 
 1. Production deployment succeeds (Vercel git integration auto-deploys `main`, or explicit production deploy).
 2. `gh run watch` confirms post-push CI run is green (lint/typecheck/test/format-check).
-3. Spending caps confirmed in OpenAI + OpenRouter dashboards (manual — user verifies).
+3. Spending cap confirmed in Google AI Studio / Cloud billing (manual — user verifies).
 4. External `curl https://basketgap-api.vercel.app/api/match -d '{"lines":["milk 2L"]}'` returns 200.
 5. Vercel deployment logs show no warnings/errors.
 6. Rate-limit working end-to-end against production (one quick burst test, then back off).
@@ -153,7 +153,7 @@ Hand over a green API package: `packages/api/` deployed to Vercel production as 
 - Web client / admin dashboard
 - Postcode→store mapping data ingestion (zones table population)
 - WAF / Cloudflare in front of Vercel
-- Real production seeding of `canonical_products` (separate task; needs OpenAI budget)
+- Real production seeding of `canonical_products` (separate task; needs Gemini budget)
 - Vercel Edge Functions experiment (we're on Node runtime for Round 8 since matching pipeline uses `postgres-js` which requires Node APIs)
 
 ## Resumption protocol

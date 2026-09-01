@@ -14,9 +14,9 @@ const mockLimiter: { current: RateLimiterLike | null } = { current: null };
 
 vi.mock('../lib/infra.ts', () => ({
   getMatchingContext: vi.fn(() => ({
-    hasOpenAi: false,
-    hasOpenRouter: false,
-    openRouterModel: '',
+    hasEmbeddings: false,
+    hasLlm: false,
+    llmModel: '',
     embedText: vi.fn(),
     llmChoose: vi.fn(async () => ({ chosenId: 'cid', confidence: 0.9, reasoning: '' })),
     loadCandidatesByName: vi.fn(),

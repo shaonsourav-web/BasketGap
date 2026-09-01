@@ -23,15 +23,6 @@ export interface MatchAuditEntry {
   notes: string;
 }
 
-export interface CleanedLine {
-  raw: string;
-  cleaned: string;
-  brand: string | null;
-  quantity: number | null;
-  sizeValue: number | null;
-  sizeUom: string | null;
-}
-
 export interface MatchResult {
   raw: string;
   cleaned: string;
@@ -45,9 +36,12 @@ export interface MatchResult {
 }
 
 export interface PipelineContext {
-  hasOpenAi: boolean;
-  hasOpenRouter: boolean;
-  openRouterModel: string;
+  /** Embedding tier available (vector search runs); false → trigram-only. */
+  hasEmbeddings: boolean;
+  /** LLM tier available (disambiguation fallback runs); false → rank-only. */
+  hasLlm: boolean;
+  /** Provider-agnostic model id used for the LLM fallback. */
+  llmModel: string;
   embedText: (text: string) => Promise<number[]>;
   llmChoose: (input: LlmChooseInput) => Promise<LlmChooseOutput>;
   loadCandidatesByName: (cleaned: string, brand: string | null) => Promise<RawCandidateRow[]>;

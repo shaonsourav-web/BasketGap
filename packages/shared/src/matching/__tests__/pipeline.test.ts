@@ -7,9 +7,9 @@ import type { CachedMatch, MatchResult, PipelineContext, RawCandidateRow } from 
 function buildCtx(overrides: Partial<PipelineContext> = {}): PipelineContext {
   const cacheStore: Map<string, CachedMatch> = new Map();
   return {
-    hasOpenAi: false,
-    hasOpenRouter: false,
-    openRouterModel: 'mock',
+    hasEmbeddings: false,
+    hasLlm: false,
+    llmModel: 'mock',
     embedText: vi.fn(async () => new Array(1536).fill(0)),
     llmChoose: vi.fn(async () => ({ chosenId: null, confidence: 0, reasoning: '' })),
     loadCandidatesByName: vi.fn<(c: string, b: string | null) => Promise<RawCandidateRow[]>>(
@@ -171,7 +171,7 @@ describe('matchLine pipeline', () => {
 
   it('LLM fallback fires when top score is below assumed threshold', async () => {
     const ctx = buildCtx({
-      hasOpenRouter: true,
+      hasLlm: true,
       loadCandidatesByName: vi.fn(async () => [
         {
           id: 'cand-a',

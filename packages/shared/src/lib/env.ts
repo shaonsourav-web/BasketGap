@@ -2,9 +2,11 @@ import { z } from 'zod';
 
 export const BaseEnvSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
-  OPENAI_API_KEY: z.string().min(1).optional(),
-  OPENROUTER_API_KEY: z.string().min(1).optional(),
-  OPENROUTER_MODEL: z.string().min(1).optional(),
+  // One key enables both provider tiers (embeddings + LLM disambiguation).
+  // Absent → the engine degrades to trigram-only / rank-only.
+  GEMINI_API_KEY: z.string().min(1).optional(),
+  GEMINI_LLM_MODEL: z.string().min(1).default('gemini-2.5-flash'),
+  GEMINI_EMBEDDING_MODEL: z.string().min(1).default('gemini-embedding-001'),
 });
 
 export type BaseEnv = z.infer<typeof BaseEnvSchema>;

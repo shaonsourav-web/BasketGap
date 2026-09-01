@@ -10,7 +10,7 @@ const USAGE = `Usage: workers <command>
 Commands:
   ping                       Connect to the database, print env + connectivity info, exit.
   ingest <adapter>           Run a retailer ingestion adapter (e.g. coles-pdf).
-  seed canonical             Embed + upsert the canonical product seed (requires OPENAI_API_KEY; supports --dry-run, --force-refresh).
+  seed canonical             Embed + upsert the canonical product seed (requires GEMINI_API_KEY; supports --dry-run, --force-refresh).
   match --line "<text>"      Match a single shopping-list line via the deterministic-first pipeline.
   match --list <file>|-      Match every newline-separated line from a file or stdin.
   enrich-skus                Map existing specials.retailer_sku → canonical_products.id (supports --retailer, --limit, --dry-run).

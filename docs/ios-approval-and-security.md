@@ -198,7 +198,7 @@ Device ID must be signed or accompanied by server-issued anonymous session token
 
 **Threat:** Logs often become the accidental database of sensitive user behavior.
 
-**Mitigation:** Never log full shopping lists, raw LLM prompts, raw postcodes tied to device IDs, service role keys, retailer tokens, or full provider responses. Log request IDs, coarse postcode region or hash where needed, line count, unmatched count, latency buckets, model ID, token counts, error class, and freshness age. Sentry breadcrumbs must redact request bodies. LLM provider request/response retention is disabled at the provider level where possible (OpenRouter retention settings, OpenAI API logging opt-outs). Where not possible, document the residual data flow in the privacy policy.
+**Mitigation:** Never log full shopping lists, raw LLM prompts, raw postcodes tied to device IDs, service role keys, retailer tokens, or full provider responses. Log request IDs, coarse postcode region or hash where needed, line count, unmatched count, latency buckets, model ID, token counts, error class, and freshness age. Sentry breadcrumbs must redact request bodies. LLM provider request/response retention is disabled at the provider level where possible (Gemini API data-use settings — paid-tier requests are not used for model improvement). Where not possible, document the residual data flow in the privacy policy.
 
 **Enforced at:** API logger, worker logger, Sentry config, Vercel/Axiom log drains.
 

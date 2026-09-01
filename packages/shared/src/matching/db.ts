@@ -2,10 +2,15 @@ import { eq, sql } from 'drizzle-orm';
 
 import type { Db } from '../db/client.ts';
 import { matchCache } from '../db/schema.ts';
+import type { BaseEnv } from '../lib/env.ts';
 
-import { embedText } from './lib/embeddings.ts';
+import {
+  chooseWithLlm,
+  DEFAULT_GEMINI_EMBEDDING_MODEL,
+  DEFAULT_GEMINI_LLM_MODEL,
+  embedText,
+} from './lib/gemini.ts';
 import { hitsToPrior } from './lib/popularity.ts';
-import { chooseWithLlm, DEFAULT_OPENROUTER_MODEL } from './lib/openrouter.ts';
 import type {
   CachedMatch,
   LlmChooseInput,
@@ -18,30 +23,34 @@ import type {
 
 export interface DbContextOptions {
   db: Db;
-  openAiKey?: string | undefined;
-  openRouterKey?: string | undefined;
-  openRouterModel?: string | undefined;
+  /** One Gemini key enables both tiers: embeddings and the LLM fallback. */
+  geminiKey?: string | undefined;
+  llmModel?: string | undefined;
+  embeddingModel?: string | undefined;
 }
 
 export function createDbContext(options: DbContextOptions): PipelineContext {
-  const { db, openAiKey, openRouterKey, openRouterModel } = options;
+  const { db, geminiKey, llmModel, embeddingModel } = options;
   let knownBrandsPromise: Promise<string[]> | null = null;
 
   return {
-    hasOpenAi: Boolean(openAiKey),
-    hasOpenRouter: Boolean(openRouterKey),
-    openRouterModel: openRouterModel ?? DEFAULT_OPENROUTER_MODEL,
+    hasEmbeddings: Boolean(geminiKey),
+    hasLlm: Boolean(geminiKey),
+    llmModel: llmModel ?? DEFAULT_GEMINI_LLM_MODEL,
     async embedText(text: string) {
-      if (!openAiKey) throw new Error('embedText: OPENAI_API_KEY missing');
-      return embedText(text, { apiKey: openAiKey });
+      if (!geminiKey) throw new Error('embedText: GEMINI_API_KEY missing');
+      return embedText(text, {
+        apiKey: geminiKey,
+        model: embeddingModel ?? DEFAULT_GEMINI_EMBEDDING_MODEL,
+      });
     },
     async llmChoose(input: LlmChooseInput): Promise<LlmChooseOutput> {
-      if (!openRouterKey) {
-        return { chosenId: null, confidence: 0, reasoning: 'OPENROUTER_API_KEY missing' };
+      if (!geminiKey) {
+        return { chosenId: null, confidence: 0, reasoning: 'GEMINI_API_KEY missing' };
       }
       return chooseWithLlm(input, {
-        apiKey: openRouterKey,
-        model: openRouterModel ?? DEFAULT_OPENROUTER_MODEL,
+        apiKey: geminiKey,
+        model: llmModel ?? DEFAULT_GEMINI_LLM_MODEL,
       });
     },
     loadCandidatesByName: (cleaned, brand) => loadCandidatesByName(db, cleaned, brand),
@@ -53,6 +62,20 @@ export function createDbContext(options: DbContextOptions): PipelineContext {
     readCache: (hash) => readCache(db, hash),
     writeCache: (hash, cleaned, result) => writeCache(db, hash, cleaned, result),
   };
+}
+
+/**
+ * The one way every entry point (API handler, `workers match`, `workers
+ * enrich-skus`) wires a parsed environment onto the pipeline, so the three of
+ * them cannot drift apart on which key or model override reaches the engine.
+ */
+export function createDbContextFromEnv(db: Db, env: BaseEnv): PipelineContext {
+  return createDbContext({
+    db,
+    geminiKey: env.GEMINI_API_KEY,
+    llmModel: env.GEMINI_LLM_MODEL,
+    embeddingModel: env.GEMINI_EMBEDDING_MODEL,
+  });
 }
 
 async function loadKnownBrands(db: Db): Promise<string[]> {

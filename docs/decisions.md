@@ -126,10 +126,10 @@
 - **LLM fallback is constrained-output: it picks from a shortlist or declines.**
   The OpenRouter prompt names every shortlist candidate by id and forbids the model from inventing ids. The post-parse step verifies `chosenId ∈ shortlist`; out-of-set ids are dropped to `null` with reasoning `"LLM chose id outside shortlist"`. This blocks the most common LLM hallucination — synthesising a plausible-looking UUID — from ever reaching the persistence layer. Strict JSON is requested; if the model wraps the JSON in prose, a regex-based recovery extracts the first `{...}` block before parsing.
 
-- **OpenRouter default model: `google/gemini-2.0-flash-001`.**
+- **OpenRouter default model: `google/gemini-2.0-flash-001`.** _(Superseded 2026-09-02 — single Gemini provider; see that entry.)_
   Fast, cheap (≈$0.075/M input, $0.30/M output), strict-JSON capable. Overridable via `OPENROUTER_MODEL`. The pipeline never depends on a specific provider's quirks: only the constrained-output contract matters. When pricing shifts, the override is a single env var.
 
-- **Embeddings: OpenAI `text-embedding-3-small`, 1536 dims.**
+- **Embeddings: OpenAI `text-embedding-3-small`, 1536 dims.** _(Superseded 2026-09-02 — `gemini-embedding-001` at 1536 dims; see that entry. The 1536 width, and therefore the schema, is unchanged.)_
   Matches the existing `canonical_products.embedding vector(1536)` column committed in Round 1 — no migration needed. Smaller and ~10× cheaper than `-large`; the matching task is single-sentence semantic similarity where the small model is empirically sufficient. The model name is pinned in `matching/lib/embeddings.ts`; bumping requires a re-seed (and a migration if dims change).
 
 - **`match_cache` is keyed on the cleaned-input hash, not the raw input.**
@@ -144,7 +144,7 @@
 - **Canonical seed: 152 hand-curated entries across 10 categories.**
   Dairy, bakery, eggs, pantry, produce, meat, frozen, snacks, drinks, household. The seed is intentionally small enough to embed in a single OpenAI batch but broad enough to exercise every step of the pipeline (size variants, brand-anchored entries, brand-agnostic entries, plural/singular pairs, Aussie-specific staples). Future enrichment via the `enrich-skus` command grows the catalogue from real retailer data. Seed IDs are deterministic — `deterministicUuid(name, brand, category, uom, value)` — so re-running the seed against the same entries is idempotent without coordination.
 
-- **`workers seed canonical` requires `OPENAI_API_KEY` for live runs; dry-run plans without it.**
+- **`workers seed canonical` requires an embeddings key for live runs; dry-run plans without it.** _(The var is `GEMINI_API_KEY` from 2026-09-02; was `OPENAI_API_KEY`.)_
   Embeddings are mandatory for the vector path, so live seeding can't degrade to no-embed mode. But `--dry-run` short-circuits before any API call and reports the insert / refresh / already-present split, which is enough for CI smoke tests and local plan-checks. `--force-refresh` re-embeds every entry — useful when bumping the embedding model.
 
 - **`workers enrich-skus` walks `selectDistinctOn(retailer, retailer_sku)`.**
@@ -238,3 +238,60 @@
 - Third independent blind set committed: `gold-opus-stress-2026-09-02.json` (250 deliberately-hard lines, Opus-authored from seed only). Baseline engine scored 93.0% / 0 wrong / 2 false accepts on it; an adversarial code review proved 8 further holes (worst: "straws"→Strawberries Punnet at matched via slang-key fuzzy correction; DB-row-order-dependent pack ties; stated-size and dosage-form contradictions still priced as matched).
 - Fix round (Opus built, Fable re-verified by execution): corrector vocabulary rebuilt (fuzzy targets = canonical/brand/typo-value words only; shorthand keys exact-only; 2-edit corrections must keep the first two chars or be a transposition), quantity now a pack-size rank signal with deterministic name/id tiebreak, ambiguous shorthand guesses (detergent/mince/cooking oil/fizzy/softie) OR into the assumed-band cap, stated-but-contradicted size caps at 0.79, dosage-form and un-prefix qualifier conflicts cap below assumed, compound splitting (oatmilk→oat milk), trailing-noise allow-list, dictionary adds (chippies/shortcut bacon/brown bread/tortilla), `punnet`/`button` noise-contract violations removed.
 - Post-fix, all four sets, Fable-reproduced: codex **99.5%** / 0 wrong / 97.6% precision; opus 98.3% / 0 / 100%; stress **98.0% / 0 wrong / 0 false accepts / 100% precision**; in-house 99.5%. Shared suite 292 passed, typecheck clean.
+
+## 2026-09-02 — Single provider: Gemini replaces OpenAI + OpenRouter
+
+- **Owner decision: this project uses Gemini 2.5 Flash.** The two-provider split
+  (OpenAI for embeddings, OpenRouter as the LLM gateway) is replaced by one
+  Google Generative Language API v1beta client, `matching/lib/gemini.ts`, and one
+  key. `OPENAI_API_KEY` / `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` are gone;
+  the env surface is now `GEMINI_API_KEY` (optional) plus the model overrides
+  `GEMINI_LLM_MODEL` (default `gemini-2.5-flash`) and `GEMINI_EMBEDDING_MODEL`
+  (default `gemini-embedding-001`). One key enables both tiers, so the previous
+  three-way degradation matrix collapses to two states: keyed (vector + LLM) and
+  keyless (trigram-only, rank-only). The keyless path — what CI and every eval
+  gate exercise — is byte-for-byte unchanged, and the blind gold sets re-scored
+  identically after the swap (codex 99.5% / 0 wrong / 97.6% precision; opus
+  98.3% / 0 / 100%; stress 98.0% / 0 / 0 false accepts / 100%).
+
+- **Embeddings: `gemini-embedding-001` requested at `outputDimensionality: 1536`
+  — no schema migration.** Gemini's native width is 3072; asking for 1536 keeps
+  the `canonical_products.embedding vector(1536)` column and the pgvector index
+  exactly as committed in Round 1. `EMBEDDING_DIM` stays exported at 1536.
+  **Normalisation is load-bearing:** Gemini only returns unit-length vectors at
+  its native dimensionality. A truncated 1536-dim vector is NOT normalised, and
+  our similarity is cosine (`<=>`), so `embedText` L2-normalises before
+  returning — for query vectors and for the vectors the seeder stores alike.
+  Skipping it would not error; it would silently degrade every vector search,
+  which is why there is a unit test asserting ‖v‖ = 1. A live re-seed is
+  required when the key lands: vectors from the old model are not comparable
+  with the new model's, regardless of matching width.
+
+- **LLM fallback is now schema-constrained at the API level, not just by prompt.**
+  The `:generateContent` call sets `temperature: 0`,
+  `responseMimeType: 'application/json'` and a `responseSchema` of
+  `{chosenId: string|null, confidence: number}` where `chosenId` carries an
+  `enum` of exactly the shortlist ids. Inventing a UUID is now structurally
+  impossible rather than merely forbidden by the prompt; step 08 still
+  re-validates `chosenId ∈ shortlist` as defence in depth. The purpose-lock
+  contract, function signature and semantics (pick one, or decline with null)
+  are unchanged. The schema deliberately has **no free-text field** — the old
+  `reasoning` string was model-authored prose entering our data for no
+  operational benefit; it is now written locally as `gemini:<model>`.
+
+- **Security posture preserved.** The key is server-side only and travels in the
+  `x-goog-api-key` header, never the URL (URLs land in proxy and CDN logs);
+  it is never logged and never appears in error text. Prompts still carry only
+  the cleaned line and candidate ids/names — no device ids, postcodes or raw
+  baskets. Provider tests are mock-based and make zero network calls.
+
+- **Context flags renamed to be provider-agnostic.** `PipelineContext.hasOpenAi`
+  → `hasEmbeddings`, `hasOpenRouter` → `hasLlm`, `openRouterModel` → `llmModel`.
+  Steps 06 and 08 gate on the new names with identical behaviour. A provider name
+  in the pipeline contract was what made the previous swap touch every test file;
+  the semantic names mean the next one will not.
+
+- **Per-call cost (USD, list rates checked 2026-09-02):** Gemini 2.5 Flash
+  $0.30 / 1M input tokens, $2.50 / 1M output tokens → ≈ $0.00017 per
+  disambiguation call, ≈ $0.0017 for a request that exhausts the default cap of 10. `withLlmCap` semantics are untouched. Spend ceilings now live in one place
+  (Google AI Studio / Cloud billing) instead of two dashboards.

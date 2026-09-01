@@ -3,7 +3,7 @@ import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { createDb, createSqlClient, type Db } from '@basketgap/shared/db/client';
 import { retailerSkus, specials } from '@basketgap/shared/db/schema';
 import { loadEnv } from '@basketgap/shared/lib/env';
-import { createDbContext } from '@basketgap/shared/matching/db';
+import { createDbContextFromEnv } from '@basketgap/shared/matching/db';
 import { matchLine } from '@basketgap/shared/matching/pipeline';
 import type { ConfidenceBand } from '@basketgap/shared/matching/types';
 
@@ -86,12 +86,7 @@ export async function enrichSkus(options: EnrichArgs & { db?: Db }): Promise<Enr
       .orderBy(specials.retailer, identity, desc(specials.updatedAt))
       .limit(options.limit);
 
-    const ctx = createDbContext({
-      db,
-      openAiKey: env.OPENAI_API_KEY,
-      openRouterKey: env.OPENROUTER_API_KEY,
-      openRouterModel: env.OPENROUTER_MODEL,
-    });
+    const ctx = createDbContextFromEnv(db, env);
 
     for (const row of rows) {
       considered++;

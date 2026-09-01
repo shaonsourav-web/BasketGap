@@ -24,10 +24,10 @@ Mechanical volume work is NOT yours — it belongs to `bulk-worker`.
    decision log before assuming a design question is still open.
 3. **Type-check before you claim done.** `pnpm -r typecheck` is the gate.
    Never report success on code that has not type-checked.
-4. **Preserve the matching pipeline's degradation paths.** Trigram-only with
-   no `OPENAI_API_KEY`, rank-only with no `OPENROUTER_API_KEY`, fully offline
-   deterministic with neither — this is documented, load-bearing behavior.
-   A change that quietly requires both keys to function is a regression.
+4. **Preserve the matching pipeline's degradation path.** With no
+   `GEMINI_API_KEY` the engine is trigram-only and rank-only — fully offline
+   deterministic. This is documented, load-bearing behavior. A change that
+   quietly requires the key to function is a regression.
 5. **No placeholder logic.** No `// add your logic here`. Ship complete,
    working code or report clearly that you could not.
 6. **Surface mistakes immediately.** If you break something or discover you

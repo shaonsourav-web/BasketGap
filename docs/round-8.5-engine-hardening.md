@@ -23,17 +23,17 @@ This plan is the pre-production checklist the user asked for: every fix, every d
 
 ## Engine defects found (evidence-backed)
 
-| #   | Defect                                                                                                                                               | File                                               | Impact                                                        |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------- |
-| 1   | **Cache key drops size** — hashes size-stripped residual, so "milk 1L"/"2L"/"3L" collide to one entry; first result served for all                   | `steps/09-cache.ts`, `pipeline.ts:28-29`           | Correctness bug — wrong prices returned                       |
-| 2   | **Shorthand duplication** — "full cream milk" → "full cream milk **milk**", "skim milk" → "skim milk milk"                                           | `steps/03-shorthand.ts`                            | Degrades the trigram score it feeds                           |
-| 3   | **Brand signal is dead** — pipeline hardcodes `brand: null`; no step extracts brand                                                                  | `pipeline.ts:48,60`, `steps/01-clean.ts`           | 0.10 of ranker weight always 0; "Bega cheese" undiscriminated |
-| 4   | **Popularity signal is dead** — `popularityPrior` never populated                                                                                    | `steps/07-rank.ts`, `db.ts`                        | Another 0.10 of weight always 0                               |
-| 5   | **No unit conversion** — `computeSizeMatch` requires exact UoM string; "500g" vs "0.5kg" → 0                                                         | `steps/07-rank.ts:69`, `steps/04-quantity-size.ts` | Size signal silently zeroes on equivalent sizes               |
-| 6   | **Multipack quantity discarded** — extracted then never passed to ranker                                                                             | `pipeline.ts:60`, `steps/04`                       | "24 pack", "1 dozen" intent lost                              |
-| 7   | **Boost-ladder is the real classifier** — with 20% weight dead, max weighted sum ≈ 0.80; **with no OpenAI key, weighted path can't reach `assumed`** | `steps/07-rank.ts`, `types.ts`                     | Bands are hand-tuned constants, unvalidated                   |
-| 8   | **Toy catalogue** — 152 rows, 7 branded, whole aisles missing; ivfflat `lists=100` mis-tuned for 152 rows                                            | `seed/canonical-seed.ts`, migration                | Most branded/specialty items → no match                       |
-| 9   | **Typo table** — 46 exact-match entries + dead `bred_loaf` key; no fuzzy                                                                             | `dictionaries/typos.ts`                            | Decorative; real tolerance comes from pg_trgm                 |
+| #   | Defect                                                                                                                                                   | File                                               | Impact                                                        |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------- |
+| 1   | **Cache key drops size** — hashes size-stripped residual, so "milk 1L"/"2L"/"3L" collide to one entry; first result served for all                       | `steps/09-cache.ts`, `pipeline.ts:28-29`           | Correctness bug — wrong prices returned                       |
+| 2   | **Shorthand duplication** — "full cream milk" → "full cream milk **milk**", "skim milk" → "skim milk milk"                                               | `steps/03-shorthand.ts`                            | Degrades the trigram score it feeds                           |
+| 3   | **Brand signal is dead** — pipeline hardcodes `brand: null`; no step extracts brand                                                                      | `pipeline.ts:48,60`, `steps/01-clean.ts`           | 0.10 of ranker weight always 0; "Bega cheese" undiscriminated |
+| 4   | **Popularity signal is dead** — `popularityPrior` never populated                                                                                        | `steps/07-rank.ts`, `db.ts`                        | Another 0.10 of weight always 0                               |
+| 5   | **No unit conversion** — `computeSizeMatch` requires exact UoM string; "500g" vs "0.5kg" → 0                                                             | `steps/07-rank.ts:69`, `steps/04-quantity-size.ts` | Size signal silently zeroes on equivalent sizes               |
+| 6   | **Multipack quantity discarded** — extracted then never passed to ranker                                                                                 | `pipeline.ts:60`, `steps/04`                       | "24 pack", "1 dozen" intent lost                              |
+| 7   | **Boost-ladder is the real classifier** — with 20% weight dead, max weighted sum ≈ 0.80; **with no embeddings key, weighted path can't reach `assumed`** | `steps/07-rank.ts`, `types.ts`                     | Bands are hand-tuned constants, unvalidated                   |
+| 8   | **Toy catalogue** — 152 rows, 7 branded, whole aisles missing; ivfflat `lists=100` mis-tuned for 152 rows                                                | `seed/canonical-seed.ts`, migration                | Most branded/specialty items → no match                       |
+| 9   | **Typo table** — 46 exact-match entries + dead `bred_loaf` key; no fuzzy                                                                                 | `dictionaries/typos.ts`                            | Decorative; real tolerance comes from pg_trgm                 |
 
 ---
 
@@ -52,7 +52,7 @@ Ordered by leverage. Each is small and testable in isolation.
 5. **Wire popularity (defect 4).** Populate `popularityPrior` in the candidate SQL (`db.ts`) from `match_cache.hit_count` (normalized), which already accrues on reads. Test: monotonicity — higher hit_count → higher prior.
 6. **Use multipack quantity (defect 6).** Pass `quantity` into the result so the app can multiply prices; optionally factor into ranking for pack-sized canonicals. (Lower priority — mostly an app-layer/display concern.)
 7. **Reweight + re-tune bands** _after_ 3–5 are live (so brand/popularity actually fire), validated by the eval harness (Part B) — do **not** hand-tweak thresholds blind.
-8. **Performance / cost (for "super easy = fast"):** batch the per-line query embeddings across a basket instead of the serial loop in `matchBasket`; short-circuit vector search when direct lookup already returns an exact-name hit (saves an OpenAI call + latency per line).
+8. **Performance / cost (for "super easy = fast"):** batch the per-line query embeddings across a basket instead of the serial loop in `matchBasket`; short-circuit vector search when direct lookup already returns an exact-name hit (saves an embedding call + latency per line).
 9. **Offline recall (defect 9, plus the dictionary half of defect 8).** Grow `dictionaries/shorthand.ts` and replace exact-match-only typo correction with a bounded fuzzy corrector. Step-internal only — no step reordering, no `BAND_THRESHOLDS` / `RANK_WEIGHTS` change. **Done 2026-08-14** — see the after-table below.
 
 ## Part B — Measurement (the "how good is it" answer)
@@ -85,7 +85,7 @@ Run focused: `pnpm --filter @basketgap/shared test:eval`.
 - Out-of-catalogue correctly deferred: **100%** (19/19) — the engine never invented an answer for an item the catalogue does not carry
 - Mismatches: **27**, of which **26 are false negatives** (`needs_attention` on a line that has a catalogue answer) and **1 is a wrong pick** (`"laundry detergent liquid 2l"` → `Dishwashing Liquid`, `assumed` 0.60)
 
-Reading of the baseline: with no `OPENAI_API_KEY` the vector component (0.30 of the weight) and the popularity prior (0.10) are both zero, so scores come from the trigram + size + brand terms and the boost ladder. That makes the engine **conservative, not wrong** — 100% precision in `matched`, but every miss is silence. The false negatives cluster exactly where the doc predicted: unexpanded slang/abbreviation (`fc milk`, `evoo`, `coke`, `cuppa`, `tim tams`, `chook breast`, `rump`, `rashers`), fuzzy typos outside the 46-entry table (`bannanas`, `red onoins`, `chese`), and short/vague heads whose trigram overlap with a longer canonical name is low (`milk 1L`, `macaroni`, `lentils`, `bred`). Cheapest wins in order: grow `dictionaries/shorthand.ts`, replace exact-match typos with fuzzy correction, then re-measure before touching `BAND_THRESHOLDS`.
+Reading of the baseline: with no embeddings key the vector component (0.30 of the weight) and the popularity prior (0.10) are both zero, so scores come from the trigram + size + brand terms and the boost ladder. That makes the engine **conservative, not wrong** — 100% precision in `matched`, but every miss is silence. The false negatives cluster exactly where the doc predicted: unexpanded slang/abbreviation (`fc milk`, `evoo`, `coke`, `cuppa`, `tim tams`, `chook breast`, `rump`, `rashers`), fuzzy typos outside the 46-entry table (`bannanas`, `red onoins`, `chese`), and short/vague heads whose trigram overlap with a longer canonical name is low (`milk 1L`, `macaroni`, `lentils`, `bred`). Cheapest wins in order: grow `dictionaries/shorthand.ts`, replace exact-match typos with fuzzy correction, then re-measure before touching `BAND_THRESHOLDS`.
 
 **This table is the gate.** Re-run the harness after any threshold/weight change and compare; do not tune blind.
 
@@ -136,18 +136,18 @@ For "super easy to use + customer satisfaction," neither the 152-row toy (consta
 
 Strict order (each depends on the prior):
 
-1. `workers seed-canonical` — requires `OPENAI_API_KEY`; embeds + upserts the 152 staples. **Gating first step** (vector search has nothing to match without it).
+1. `workers seed-canonical` — requires `GEMINI_API_KEY`; embeds + upserts the 152 staples. **Gating first step** (vector search has nothing to match without it).
 2. `workers ingest <adapter>` × 4 (coles-pdf, woolies-pdf, coles-web, woolies-web) against live sources — populates `catalogues` + `specials` with real prices.
-3. `workers enrich-skus` — links `specials.retailer_sku` → canonical (needs `OPENAI_API_KEY`); also the bootstrap source for Part C.
+3. `workers enrich-skus` — links `specials.retailer_sku` → canonical (needs `GEMINI_API_KEY`); also the bootstrap source for Part C.
 4. Re-embed any newly derived canonical rows; re-tune ivfflat.
 
-- **Runtime cost note:** `/match` embeds **every uncached line at query time** → `OPENAI_API_KEY` is a _runtime_ dependency of the API, not just seed-time. Embedding cost is negligible (<1¢ per full catalogue; per-request scales with traffic). Dominant variable cost is the OpenRouter LLM fallback (already capped via `withLlmCap`).
+- **Runtime cost note:** `/match` embeds **every uncached line at query time** → `GEMINI_API_KEY` is a _runtime_ dependency of the API, not just seed-time. Embedding cost is negligible (<1¢ per full catalogue; per-request scales with traffic). Dominant variable cost is the Gemini LLM fallback (already capped via `withLlmCap`).
 
 ## Part E — Production deploy (Round 8 gates 4–6, after A–D)
 
 - Create Vercel project `basketgap-api` (team `team_RL7l6U4gJrlPx1yP9gkfRPAx`), root dir `packages/api`, region `syd1`; add explicit `"framework": null` to `vercel.json`.
 - Provision Upstash Redis via Vercel Marketplace (auto-populates `UPSTASH_*`).
-- Set env vars — **API (Vercel):** `DATABASE_URL` (**Supabase pooled / port 6543**), `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `ALLOWED_ORIGINS`, optional `SENTRY_DSN_API`, `MAX_LLM_CALLS_PER_REQUEST`.
+- Set env vars — **API (Vercel):** `DATABASE_URL` (**Supabase pooled / port 6543**), `GEMINI_API_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `ALLOWED_ORIGINS`, optional `SENTRY_DSN_API`, `MAX_LLM_CALLS_PER_REQUEST`.
 - Preview deploy → external curl `/api/match` → production deploy → `gh run watch` CI green.
 - Verify `.vercelignore` against real build output (`.vercel/output/` must not contain `.env*`, `docs/`, `memory/`, `.dbpass`, `*.sql`, `packages/workers/`).
 
@@ -156,9 +156,9 @@ Strict order (each depends on the prior):
 - [ ] Engine fixes A1–A5 merged + eval harness (Part B) green
 - [ ] Catalogue bootstrapped (Part C) — real breadth, not 152 staples
 - [ ] Data pipeline run (Part D) — seed → ingest → enrich, `/match` returns real prices
-- [ ] **GitHub repo secrets** set for ingest crons: `DATABASE_URL`, `SENTRY_DSN` (and add `OPENAI_API_KEY` + an `enrich-skus` scheduled workflow — currently missing)
+- [ ] **GitHub repo secrets** set for ingest crons: `DATABASE_URL`, `SENTRY_DSN` (and add `GEMINI_API_KEY` + an `enrich-skus` scheduled workflow — currently missing)
 - [ ] Vercel env vars set (Part E), `DATABASE_URL` = **pooled** URL
-- [ ] Cost caps set manually in OpenAI + OpenRouter dashboards (hard spend ceiling — the only backstop beyond per-request caps)
+- [ ] Cost cap set manually in Google AI Studio / Cloud billing (hard spend ceiling — the only backstop beyond per-request caps)
 - [ ] Upstash rate-limit verified live (30 req/60s per (ip,device)); confirm graceful behavior if Upstash is down
 - [ ] Sentry DSN wired for API + workers (recommended for launch)
 - [ ] Legal/ToS sanity check on scraping Coles/Woolies catalogues (out of code scope — user awareness)

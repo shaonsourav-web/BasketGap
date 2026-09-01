@@ -4,6 +4,5 @@ coverage
 .turbo
 .pnpm-store
 pnpm-lock.yaml
-packages/workers/src/db/schema.ts
 supabase/.branches
 supabase/.temp

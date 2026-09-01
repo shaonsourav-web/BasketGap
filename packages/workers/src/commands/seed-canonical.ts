@@ -3,9 +3,9 @@ import { inArray } from 'drizzle-orm';
 import { createDb, createSqlClient, type Db, type SqlClient } from '@basketgap/shared/db/client';
 import { canonicalProducts } from '@basketgap/shared/db/schema';
 import { loadEnv } from '@basketgap/shared/lib/env';
-import { embedText } from '@basketgap/shared/matching/lib/embeddings';
+import { embedText } from '@basketgap/shared/matching/lib/gemini';
 import { CANONICAL_SEED, type SeedEntry } from '@basketgap/shared/matching/seed/canonical-seed';
-import { deterministicUuid } from '@basketgap/shared/matching/seed/uuid';
+import { canonicalSeedId } from '@basketgap/shared/matching/seed/uuid';
 
 export interface SeedCanonicalOptions {
   dryRun: boolean;
@@ -29,7 +29,7 @@ export interface SeedCanonicalResult {
 export async function seedCanonical(options: SeedCanonicalOptions): Promise<SeedCanonicalResult> {
   const env = loadEnv();
   const withEmbeddings = !options.noEmbeddings;
-  if (withEmbeddings && !env.OPENAI_API_KEY && !options.dryRun) {
+  if (withEmbeddings && !env.GEMINI_API_KEY && !options.dryRun) {
     return {
       ok: false,
       totalSeed: CANONICAL_SEED.length,
@@ -38,7 +38,7 @@ export async function seedCanonical(options: SeedCanonicalOptions): Promise<Seed
       refreshed: 0,
       skipped: true,
       reason:
-        'OPENAI_API_KEY is required to embed seed entries (use --dry-run to plan, or --no-embeddings for trigram-only)',
+        'GEMINI_API_KEY is required to embed seed entries (use --dry-run to plan, or --no-embeddings for trigram-only)',
     };
   }
 
@@ -49,7 +49,7 @@ export async function seedCanonical(options: SeedCanonicalOptions): Promise<Seed
   try {
     const entriesWithIds = CANONICAL_SEED.map((entry) => ({
       ...entry,
-      id: idFor(entry),
+      id: canonicalSeedId(entry),
     }));
     const ids = entriesWithIds.map((e) => e.id);
     const existing = await db
@@ -78,7 +78,10 @@ export async function seedCanonical(options: SeedCanonicalOptions): Promise<Seed
     let refreshed = 0;
     for (const entry of toInsert) {
       const embedding = withEmbeddings
-        ? await embedText(embedInputFor(entry), { apiKey: env.OPENAI_API_KEY! })
+        ? await embedText(embedInputFor(entry), {
+            apiKey: env.GEMINI_API_KEY!,
+            model: env.GEMINI_EMBEDDING_MODEL,
+          })
         : null;
       const existed = existingSet.has(entry.id);
       const common = {
@@ -122,16 +125,6 @@ export async function seedCanonical(options: SeedCanonicalOptions): Promise<Seed
       await sql.end({ timeout: 5 });
     }
   }
-}
-
-export function idFor(entry: SeedEntry): string {
-  return deterministicUuid(
-    entry.name,
-    entry.brand,
-    entry.category,
-    entry.unitSizeUom ?? '',
-    String(entry.unitSizeValue ?? ''),
-  );
 }
 
 function embedInputFor(entry: SeedEntry): string {

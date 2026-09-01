@@ -4,7 +4,7 @@ export async function vectorSearch(
   cleaned: string,
   ctx: PipelineContext,
 ): Promise<RawCandidateRow[]> {
-  if (!cleaned || !ctx.hasOpenAi) return [];
+  if (!cleaned || !ctx.hasEmbeddings) return [];
   const embedding = await ctx.embedText(cleaned);
   return ctx.loadCandidatesByVector(embedding);
 }

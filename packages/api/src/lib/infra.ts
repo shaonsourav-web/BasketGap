@@ -1,5 +1,5 @@
 import { createDb, createSqlClient, type Db, type SqlClient } from '@basketgap/shared/db';
-import { createDbContext } from '@basketgap/shared/matching/db';
+import { createDbContextFromEnv } from '@basketgap/shared/matching/db';
 import type { PipelineContext } from '@basketgap/shared/matching/types';
 import {
   loadOffersForCanonicalIds,
@@ -30,13 +30,7 @@ export function getDb(): Db {
 }
 
 export function getMatchingContext(): PipelineContext {
-  const env = getApiEnv();
-  return createDbContext({
-    db: getDb(),
-    openAiKey: env.OPENAI_API_KEY,
-    openRouterKey: env.OPENROUTER_API_KEY,
-    openRouterModel: env.OPENROUTER_MODEL,
-  });
+  return createDbContextFromEnv(getDb(), getApiEnv());
 }
 
 export function loadOffers(

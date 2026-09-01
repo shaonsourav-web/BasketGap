@@ -5,7 +5,7 @@ export async function llmFallback(
   shortlist: MatchCandidate[],
   ctx: PipelineContext,
 ): Promise<LlmChooseOutput | null> {
-  if (!ctx.hasOpenRouter) return null;
+  if (!ctx.hasLlm) return null;
   if (shortlist.length === 0) return null;
   const result = await ctx.llmChoose({ cleaned, shortlist });
   if (result.chosenId == null) return result;

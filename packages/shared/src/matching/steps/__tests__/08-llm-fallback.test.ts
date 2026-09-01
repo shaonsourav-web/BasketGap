@@ -20,11 +20,11 @@ function candidate(id: string, score = 0.4): MatchCandidate {
   };
 }
 
-function ctxWith(llmChoose: PipelineContext['llmChoose'], hasOpenRouter = true): PipelineContext {
+function ctxWith(llmChoose: PipelineContext['llmChoose'], hasLlm = true): PipelineContext {
   return {
-    hasOpenAi: false,
-    hasOpenRouter,
-    openRouterModel: 'mock',
+    hasEmbeddings: false,
+    hasLlm,
+    llmModel: 'mock',
     embedText: vi.fn(),
     llmChoose,
     loadCandidatesByName: vi.fn(),
@@ -35,7 +35,7 @@ function ctxWith(llmChoose: PipelineContext['llmChoose'], hasOpenRouter = true):
 }
 
 describe('llmFallback', () => {
-  it('returns null when OpenRouter is not configured', async () => {
+  it('returns null when the LLM tier is not configured', async () => {
     const ctx = ctxWith(vi.fn(), false);
     const res = await llmFallback('milk', [candidate('a')], ctx);
     expect(res).toBeNull();

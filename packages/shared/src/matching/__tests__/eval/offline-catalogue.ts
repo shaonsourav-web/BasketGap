@@ -1,5 +1,5 @@
 import { CANONICAL_SEED, type SeedEntry } from '../../seed/canonical-seed.ts';
-import { deterministicUuid } from '../../seed/uuid.ts';
+import { canonicalSeedId } from '../../seed/uuid.ts';
 import type { PipelineContext, RawCandidateRow } from '../../types.ts';
 
 import { trigramSimilarity } from './pg-trgm.ts';
@@ -8,26 +8,12 @@ export interface CatalogueRow extends SeedEntry {
   id: string;
 }
 
-/**
- * Same id derivation as `workers/src/commands/seed-canonical.ts#idFor`, so the
- * in-memory catalogue carries the ids the live catalogue would carry.
- */
-export function idFor(entry: SeedEntry): string {
-  return deterministicUuid(
-    entry.name,
-    entry.brand,
-    entry.category,
-    entry.unitSizeUom ?? '',
-    String(entry.unitSizeValue ?? ''),
-  );
-}
-
+/** Shares `canonicalSeedId` with the live seeder, so the in-memory catalogue
+ * carries the ids the live catalogue would carry. */
 export const CATALOGUE: CatalogueRow[] = CANONICAL_SEED.map((entry) => ({
   ...entry,
-  id: idFor(entry),
+  id: canonicalSeedId(entry),
 }));
-
-export const CATALOGUE_BY_ID = new Map<string, CatalogueRow>(CATALOGUE.map((r) => [r.id, r]));
 
 /** Distinct lowercased brands — mirrors `loadKnownBrands` in `matching/db.ts`. */
 export const KNOWN_BRANDS: string[] = [
@@ -79,17 +65,17 @@ export function loadCandidatesByName(cleaned: string, brand: string | null): Raw
 }
 
 /**
- * Builds the offline pipeline context: no OpenAI, no OpenRouter, no database,
- * no cache. The vector step short-circuits on `hasOpenAi: false` and the LLM
- * fallback on `hasOpenRouter: false`, so the harness measures the deterministic
+ * Builds the offline pipeline context: no Gemini key, no database, no cache.
+ * The vector step short-circuits on `hasEmbeddings: false` and the LLM
+ * fallback on `hasLlm: false`, so the harness measures the deterministic
  * path only. Cache reads always miss so each labelled line is scored
  * independently of the order the fixture happens to be written in.
  */
 export function createOfflineContext(): PipelineContext {
   return {
-    hasOpenAi: false,
-    hasOpenRouter: false,
-    openRouterModel: 'offline-eval',
+    hasEmbeddings: false,
+    hasLlm: false,
+    llmModel: 'offline-eval',
     embedText: () => Promise.reject(new Error('eval harness must not call embedText')),
     llmChoose: () => Promise.reject(new Error('eval harness must not call llmChoose')),
     loadCandidatesByName: (cleaned, brand) => Promise.resolve(loadCandidatesByName(cleaned, brand)),
