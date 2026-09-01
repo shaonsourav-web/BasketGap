@@ -65,7 +65,10 @@ export interface RawCandidateRow {
   category: string | null;
   unitSizeValue: number | null;
   unitSizeUom: string | null;
+  /** Similarity of the cleaned line to the product NAME only — never brand. */
   textSimilarity?: number;
+  /** Similarity of the extracted brand to the product's brand, when both exist. */
+  brandSimilarity?: number;
   vectorSimilarity?: number;
   popularityPrior?: number;
 }

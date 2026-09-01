@@ -55,6 +55,19 @@ export function extractQuantitySize(input: string): QuantitySizeExtract {
     residual = residual.replace(dozMatch[0], ' ').trim();
   }
 
+  // Leftover bare numbers ("1.25 coke", "2 red onion") and orphan pack/each
+  // tokens carry no product identity; strip them so they stop diluting the
+  // name-similarity query. An integer becomes the quantity when none was set.
+  const bareNumber = /(?:^|\s)(\d+(?:\.\d+)?)(?=\s|$)/;
+  const bareMatch = bareNumber.exec(residual);
+  if (bareMatch && bareMatch[1]) {
+    if (quantity == null && Number.isInteger(Number(bareMatch[1])) && Number(bareMatch[1]) <= 24) {
+      quantity = Number.parseInt(bareMatch[1], 10);
+    }
+    residual = residual.replace(bareMatch[0], ' ');
+  }
+  residual = residual.replace(/\b(pack|ea)\b/g, ' ');
+
   residual = residual.replace(/\s+/g, ' ').trim();
   return { residual, quantity, sizeValue, sizeUom };
 }

@@ -53,17 +53,17 @@ export async function matchLine(raw: string, ctx: PipelineContext): Promise<Matc
   }
 
   let brand: string | null = null;
-  let nameQuery = cleanedForMatch;
+  const nameQuery = cleanedForMatch;
   if (ctx.loadKnownBrands) {
     const extracted = await stepAuditAsync(audit, 'brand-extract', async () => {
       const brands = await ctx.loadKnownBrands!();
       return extractBrand(cleanedForMatch, new Set(brands));
     });
-    if (extracted.brand) {
-      brand = extracted.brand;
-      // If the line was only a brand ("vegemite"), keep it as the name query.
-      if (extracted.residual) nameQuery = extracted.residual;
-    }
+    // The brand token stays in the name query: many canonical names carry the
+    // brand ("Vegemite Spread", "Weet-Bix Cereal"), and stripping it collapsed
+    // their similarity to the residual ("spread", "cereal"). extractBrand's
+    // job here is only to supply the brand signal for rank.
+    if (extracted.brand) brand = extracted.brand;
   }
 
   const direct = await stepAuditAsync(audit, 'direct-lookup', () =>

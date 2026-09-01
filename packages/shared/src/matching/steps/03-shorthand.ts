@@ -10,10 +10,14 @@ const MAX_NGRAM = 3;
 const SIZE_TOKENS = new Set(['l', 'ml', 'kg', 'g', 'ea', 'pack', 'dozen']);
 
 function isSizeToken(token: string): boolean {
-  if (/^x?\d+(\.\d+)?$/.test(token)) return true;
+  if (/^(x?\d+(\.\d+)?|\d+(\.\d+)?x)$/.test(token)) return true;
   return SIZE_TOKENS.has(token.toLowerCase());
 }
 
+// Single pass by design: a second pass re-expands tokens inside completed
+// expansions ("laundry detergent powder" → "laundry dishwashing liquid
+// powder"). Phrases whose expansion would only become visible after another
+// pass get their own direct keys instead ("salted crisps").
 export function expandShorthand(cleaned: string): string {
   if (!cleaned) return cleaned;
   const tokens = cleaned.split(' ');
@@ -25,7 +29,7 @@ export function expandShorthand(cleaned: string): string {
       const phrase = tokens.slice(i, i + n).join(' ');
       const hit = SHORTHAND[phrase];
       if (hit) {
-        result.push(hit);
+        pushExpansion(result, hit);
         consumed = n + expansionOverlap(hit, tokens, i + n);
         break;
       }
@@ -34,7 +38,7 @@ export function expandShorthand(cleaned: string): string {
       const unigram = tokens[i]!;
       const hit = SHORTHAND[unigram];
       if (hit) {
-        result.push(hit);
+        pushExpansion(result, hit);
         consumed = 1 + expansionOverlap(hit, tokens, i + 1);
       } else {
         result.push(unigram);
@@ -54,12 +58,39 @@ export function expandShorthand(cleaned: string): string {
  * ("snacks", "toothpaste") never acquires a default it did not ask for.
  */
 function applyHeadDefault(tokens: string[]): string[] {
+  let start = 0;
+  while (start < tokens.length && isSizeToken(tokens[start]!)) start++;
   let end = tokens.length;
-  while (end > 0 && isSizeToken(tokens[end - 1]!)) end--;
-  if (end === 0) return tokens;
-  const hit = HEAD_DEFAULTS[tokens.slice(0, end).join(' ').toLowerCase()];
+  while (end > start && isSizeToken(tokens[end - 1]!)) end--;
+  if (end === start) return tokens;
+  const hit = HEAD_DEFAULTS[tokens.slice(start, end).join(' ').toLowerCase()];
   if (!hit) return tokens;
-  return [...hit.split(' '), ...tokens.slice(end)];
+  return [...tokens.slice(0, start), ...hit.split(' '), ...tokens.slice(end)];
+}
+
+/**
+ * Push an expansion without re-emitting tokens the output already ends with —
+ * "beef" followed by "mince" → "beef mince" must yield "beef mince", not
+ * "beef beef mince".
+ */
+function pushExpansion(result: string[], expansion: string): void {
+  const expTokens = expansion.split(' ');
+  const maxK = Math.min(expTokens.length - 1, result.length);
+  let skip = 0;
+  for (let k = maxK; k >= 1; k--) {
+    let matches = true;
+    for (let j = 0; j < k; j++) {
+      if (result[result.length - k + j] !== expTokens[j]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      skip = k;
+      break;
+    }
+  }
+  result.push(...expTokens.slice(skip));
 }
 
 /**

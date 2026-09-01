@@ -78,6 +78,7 @@ async function loadCandidatesByName(
     unit_size_value: string | null;
     unit_size_uom: string | null;
     text_similarity: number;
+    brand_similarity: number;
     popularity_hits: number;
   }>(sql`
     select id,
@@ -86,14 +87,12 @@ async function loadCandidatesByName(
            category,
            unit_size_value::text as unit_size_value,
            unit_size_uom,
-           greatest(
-             similarity(lower(name), ${cleaned}),
-             case
-               when ${brand}::text is not null and brand is not null
-                 then similarity(lower(brand), ${brand})
-               else 0
-             end
-           ) as text_similarity,
+           similarity(lower(name), ${cleaned}) as text_similarity,
+           case
+             when ${brand}::text is not null and brand is not null
+               then similarity(lower(brand), ${brand})
+             else 0
+           end as brand_similarity,
            coalesce((
              select sum(mc.hit_count)::int
              from public.match_cache mc
@@ -102,7 +101,14 @@ async function loadCandidatesByName(
     from public.canonical_products
     where similarity(lower(name), ${cleaned}) > 0.2
        or lower(name) = ${cleaned}
-    order by text_similarity desc
+    order by greatest(
+             similarity(lower(name), ${cleaned}),
+             case
+               when ${brand}::text is not null and brand is not null
+                 then similarity(lower(brand), ${brand})
+               else 0
+             end
+           ) desc
     limit 10
   `);
   return rows.map((r) => ({
@@ -113,6 +119,7 @@ async function loadCandidatesByName(
     unitSizeValue: r.unit_size_value != null ? Number.parseFloat(r.unit_size_value) : null,
     unitSizeUom: r.unit_size_uom,
     textSimilarity: r.text_similarity,
+    brandSimilarity: r.brand_similarity,
     popularityPrior: hitsToPrior(r.popularity_hits),
   }));
 }

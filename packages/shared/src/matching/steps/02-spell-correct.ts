@@ -10,6 +10,26 @@ export const LONG_TOKEN_LENGTH = 6;
 const WORD_LIKE = /^[a-z][a-z'-]*$/;
 
 /**
+ * Real grocery-list words that are not in the catalogue vocabulary but sit one
+ * edit from something that is ("grated" → "grapes", "clean" → "lean"). Never
+ * fuzzy-corrected; the exact TYPOS table still applies.
+ */
+const PROTECTED_WORDS = new Set([
+  'grated',
+  'shredded',
+  'sliced',
+  'raw',
+  'plain',
+  'clean',
+  'pears',
+  'whole',
+  'fresh',
+  'small',
+  'large',
+  'litter',
+]);
+
+/**
  * Spell correction, two passes:
  *
  * 1. the hand-curated `TYPOS` table — an exact-match fast path, kept because it
@@ -52,14 +72,32 @@ export function fuzzyCorrect(
   if (token.length < MIN_CORRECTABLE_LENGTH) return null;
   if (!WORD_LIKE.test(token)) return null;
   if (vocabulary.words.has(token)) return null;
+  if (PROTECTED_WORDS.has(token)) return null;
 
   const budget = token.length >= LONG_TOKEN_LENGTH ? 2 : 1;
+  const initial = token[0];
   let best: string | null = null;
   let bestDistance = budget + 1;
   let ambiguous = false;
 
   for (let length = token.length - budget; length <= token.length + budget; length++) {
     for (const candidate of vocabulary.byLength.get(length) ?? []) {
+      // Real typos overwhelmingly preserve the first letter; requiring it
+      // stops the corrector rewriting legitimate words the vocabulary lacks
+      // ("clean" → "lean") while keeping genuine fat-finger rescues.
+      if (candidate[0] !== initial) continue;
+      // A short real word is one deletion away from many vocabulary words
+      // ("pears" → "peas"); a short token may only shrink when it carries a
+      // doubled letter — the classic double-tap typo ("milkk" → "milk") —
+      // and no token may shrink by more than one character ("litter" must
+      // never become "lite").
+      if (candidate.length < token.length - 1) continue;
+      if (
+        candidate.length < token.length &&
+        token.length < LONG_TOKEN_LENGTH &&
+        !/(.)\1/.test(token)
+      )
+        continue;
       const distance = editDistance(token, candidate, budget);
       if (distance > budget) continue;
       if (distance < bestDistance) {

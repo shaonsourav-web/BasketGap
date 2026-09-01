@@ -26,7 +26,7 @@ export function rankCandidates(input: RankInput): MatchCandidate[] {
     const vectorSimilarity = clamp01(row.vectorSimilarity ?? 0);
     const popularityPrior = clamp01(row.popularityPrior ?? 0);
     const sizeMatch = computeSizeMatch(input, row);
-    const brandMatch = computeBrandMatch(input.brand, row.brand);
+    const brandMatch = computeBrandMatch(input.brand, row.brand, row.brandSimilarity);
 
     const weightedSum = clamp01(
       RANK_WEIGHTS.text * textSimilarity +
@@ -36,12 +36,28 @@ export function rankCandidates(input: RankInput): MatchCandidate[] {
         RANK_WEIGHTS.popularity * popularityPrior,
     );
     let finalScore = weightedSum;
+    // Floors fire on NAME similarity only. Brand agreement can assist a decent
+    // name match but must never carry a bad one into the matched band — the
+    // engine once scored "arnotts shapes crackers" as Tim Tams on brand alone.
     if (textSimilarity >= 0.95) {
       finalScore = Math.max(finalScore, sizeMatch >= 1 ? 0.9 : 0.82);
     } else if (textSimilarity >= 0.7 && sizeMatch >= 1) {
       finalScore = Math.max(finalScore, 0.7);
     } else if (textSimilarity >= 0.7) {
       finalScore = Math.max(finalScore, 0.6);
+    } else if (textSimilarity >= 0.65) {
+      // Near-miss on name alone ("grated parmesan cheese" vs "Parmesan
+      // Cheese" scores 0.696) — accept as assumed, never as matched. 0.65,
+      // not 0.6: at 0.6 trigram noise sneaks junk in ("lollies party" scored
+      // 0.6+ against Parmesan Cheese).
+      finalScore = Math.max(finalScore, 0.55);
+    } else if (brandMatch >= 0.9 && textSimilarity >= 0.45) {
+      // Brand-first phrasing ("vegemite", "cadbury block 180g"): right brand
+      // with moderate name overlap — accept as assumed, never as matched.
+      finalScore = Math.max(
+        finalScore,
+        sizeMatch >= 0.9 ? Math.min(weightedSum + 0.25, 0.79) : 0.6,
+      );
     }
 
     candidates.push({
@@ -80,11 +96,14 @@ function computeSizeMatch(input: RankInput, row: RawCandidateRow): number {
   return 0;
 }
 
-function computeBrandMatch(inputBrand: string | null, rowBrand: string | null): number {
-  if (!inputBrand) return 0;
-  if (!rowBrand) return 0;
+function computeBrandMatch(
+  inputBrand: string | null,
+  rowBrand: string | null,
+  brandSimilarity: number | undefined,
+): number {
+  if (!inputBrand || !rowBrand) return 0;
   if (inputBrand.toLowerCase() === rowBrand.toLowerCase()) return 1;
-  return 0;
+  return clamp01(brandSimilarity ?? 0);
 }
 
 function clamp01(n: number): number {

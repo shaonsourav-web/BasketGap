@@ -219,8 +219,9 @@ describe('matchLine pipeline', () => {
       loadKnownBrands: vi.fn(async () => ['bega']),
     });
     const result = await matchLine('bega tasty cheese block 500g', ctx);
-    // Brand removed from the name query, passed as its own argument.
-    expect(loadByName).toHaveBeenCalledWith('tasty cheese block', 'bega');
+    // Brand stays in the name query (canonical names often carry it) and is
+    // also passed as its own signal for ranking.
+    expect(loadByName).toHaveBeenCalledWith('bega tasty cheese block', 'bega');
     // Branded candidate outranks the otherwise-identical generic one.
     expect(result.canonicalProductId).toBe('bega-tasty');
     expect(result.top!.brandMatch).toBe(1);

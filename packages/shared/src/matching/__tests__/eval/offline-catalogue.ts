@@ -37,7 +37,11 @@ export const KNOWN_BRANDS: string[] = [
 /** The set of canonical names the labelled fixture is allowed to reference. */
 export const CANONICAL_NAMES = new Set(CATALOGUE.map((r) => r.name.toLowerCase()));
 
-function toRow(row: CatalogueRow, textSimilarity: number): RawCandidateRow {
+function toRow(
+  row: CatalogueRow,
+  textSimilarity: number,
+  brandSimilarity: number,
+): RawCandidateRow {
   return {
     id: row.id,
     name: row.name,
@@ -46,6 +50,7 @@ function toRow(row: CatalogueRow, textSimilarity: number): RawCandidateRow {
     unitSizeValue: row.unitSizeValue,
     unitSizeUom: row.unitSizeUom,
     textSimilarity,
+    brandSimilarity,
     // No `match_cache` offline, so every row's popularity prior is 0 — the same
     // value a cold production catalogue would report before any traffic.
     popularityPrior: 0,
@@ -54,22 +59,23 @@ function toRow(row: CatalogueRow, textSimilarity: number): RawCandidateRow {
 
 /**
  * In-memory equivalent of the `loadCandidatesByName` query in `matching/db.ts`:
- * greatest(name similarity, brand similarity), filtered on name similarity > 0.2
- * (or an exact lowercase name equality), ordered desc, limit 10.
+ * name similarity and brand similarity reported separately, filtered on name
+ * similarity > 0.2 (or an exact lowercase name equality), ordered by the
+ * greatest of the two, limit 10.
  */
 export function loadCandidatesByName(cleaned: string, brand: string | null): RawCandidateRow[] {
   if (!cleaned) return [];
-  const rows: Array<{ row: CatalogueRow; nameSim: number; textSim: number }> = [];
+  const rows: Array<{ row: CatalogueRow; nameSim: number; brandSim: number; best: number }> = [];
   for (const row of CATALOGUE) {
     const nameSim = trigramSimilarity(row.name.toLowerCase(), cleaned);
     const brandSim =
       brand && row.brand ? trigramSimilarity(row.brand.toLowerCase(), brand.toLowerCase()) : 0;
     if (nameSim > 0.2 || row.name.toLowerCase() === cleaned) {
-      rows.push({ row, nameSim, textSim: Math.max(nameSim, brandSim) });
+      rows.push({ row, nameSim, brandSim, best: Math.max(nameSim, brandSim) });
     }
   }
-  rows.sort((a, b) => b.textSim - a.textSim || a.row.name.localeCompare(b.row.name));
-  return rows.slice(0, 10).map((r) => toRow(r.row, r.textSim));
+  rows.sort((a, b) => b.best - a.best || a.row.name.localeCompare(b.row.name));
+  return rows.slice(0, 10).map((r) => toRow(r.row, r.nameSim, r.brandSim));
 }
 
 /**
