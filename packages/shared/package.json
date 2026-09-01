@@ -10,6 +10,7 @@
     ".": "./src/index.ts",
     "./db": "./src/db/index.ts",
     "./matching": "./src/matching/index.ts",
+    "./pricing": "./src/pricing/index.ts",
     "./*": "./src/*.ts"
   },
   "scripts": {
