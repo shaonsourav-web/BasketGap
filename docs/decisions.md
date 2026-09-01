@@ -212,3 +212,10 @@
 
 - **Security patch versions are pinned without broad dependency churn.**
   Hono, its Zod validator, Sentry, and Upstash were updated within their current architecture. Workspace overrides pin patched `undici` and `brace-expansion` transitive versions until their parents absorb those releases. Production audit and peer checks are clean after the change.
+
+## 2026-09-01 — Offers layer + enrichment identity
+
+- **/api/match now returns offers** (current specials per matched product for both retailers). Offers degrade to `null` with `stats.offers_available=false` on query failure — matching never fails because pricing is down.
+- **Enrichment keys on printed identity, not SKU.** All four adapters emit `retailerSku: null` (catalogue sources don't print SKUs), so `enrich-skus` was a no-op and `specials.retailer_sku_id` was never set — the price join could not work. Enrich now falls back to a synthetic `name:<slug>` key, and backfills `specials.retailer_sku_id`. Match query is the printed name (+size only if absent); appending the catalogue brand demonstrably drops generic-canonical matches to needs_attention.
+- **`seed canonical --no-embeddings`** seeds the 152 staples with null vectors for the keyless trigram-only configuration (app is free; zero-spend path is first-class). A later keyed seed refresh adds embeddings without wiping anything.
+- Local e2e verified against `supabase start` (Docker): seed → 4 fixture ingests → enrich (7/26 linked, rest correctly deferred without embeddings/LLM) → API returns both-store offers.

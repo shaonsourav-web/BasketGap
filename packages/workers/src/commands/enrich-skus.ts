@@ -1,4 +1,4 @@
-import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 
 import { createDb, createSqlClient, type Db } from '@basketgap/shared/db/client';
 import { retailerSkus, specials } from '@basketgap/shared/db/schema';
@@ -18,7 +18,23 @@ export interface EnrichResult {
   considered: number;
   bands: Record<ConfidenceBand, number>;
   upserts: number;
+  specialsLinked: number;
   dryRun: boolean;
+}
+
+/**
+ * The catalogue adapters rarely see a real retailer SKU (PDF and web sources
+ * print product names, not SKUs), so identity falls back to a synthetic key
+ * derived from the printed name + size. Stable across weekly re-ingests of the
+ * same product; fits the retailer_skus (retailer, retailer_sku) unique key.
+ */
+export function syntheticSkuFor(productName: string, sizeText: string | null): string {
+  const slug = `${productName} ${sizeText ?? ''}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 180);
+  return `name:${slug}`;
 }
 
 function parseArgs(argv: string[]): EnrichArgs {
@@ -53,10 +69,12 @@ export async function enrichSkus(options: EnrichArgs & { db?: Db }): Promise<Enr
   };
   let considered = 0;
   let upserts = 0;
+  let specialsLinked = 0;
 
   try {
+    const identity = sql`coalesce(${specials.retailerSku}, ${specials.productName} || '|' || coalesce(${specials.sizeText}, ''))`;
     const rows = await db
-      .selectDistinctOn([specials.retailer, specials.retailerSku], {
+      .selectDistinctOn([specials.retailer, identity], {
         retailer: specials.retailer,
         retailerSku: specials.retailerSku,
         productName: specials.productName,
@@ -64,13 +82,8 @@ export async function enrichSkus(options: EnrichArgs & { db?: Db }): Promise<Enr
         sizeText: specials.sizeText,
       })
       .from(specials)
-      .where(
-        and(
-          isNotNull(specials.retailerSku),
-          options.retailer ? eq(specials.retailer, options.retailer) : sql`true`,
-        ),
-      )
-      .orderBy(specials.retailer, specials.retailerSku, desc(specials.updatedAt))
+      .where(options.retailer ? eq(specials.retailer, options.retailer) : sql`true`)
+      .orderBy(specials.retailer, identity, desc(specials.updatedAt))
       .limit(options.limit);
 
     const ctx = createDbContext({
@@ -82,20 +95,26 @@ export async function enrichSkus(options: EnrichArgs & { db?: Db }): Promise<Enr
 
     for (const row of rows) {
       considered++;
-      const queryText = [row.productName, row.brand ?? '', row.sizeText ?? '']
-        .filter(Boolean)
-        .join(' ');
+      // Match on the printed product name; append the size only when the name
+      // doesn't already carry it. Appending the catalogue brand is harmful —
+      // the canonical seed is mostly unbranded, and a mismatched brand token
+      // drags a clean name match down into needs_attention.
+      const name = row.productName;
+      const size = row.sizeText ?? '';
+      const queryText =
+        size && !name.toLowerCase().includes(size.toLowerCase()) ? `${name} ${size}` : name;
       const match = await matchLine(queryText, ctx);
       bands[match.band] += 1;
       if (match.band === 'needs_attention') continue;
       if (options.dryRun) continue;
       if (!match.canonicalProductId) continue;
       const confidenceNum = clamp01(match.top?.finalScore ?? 0);
-      await db
+      const skuKey = row.retailerSku ?? syntheticSkuFor(row.productName, row.sizeText);
+      const [linked] = await db
         .insert(retailerSkus)
         .values({
           retailer: row.retailer,
-          retailerSku: row.retailerSku!,
+          retailerSku: skuKey,
           canonicalProductId: match.canonicalProductId,
           lastSeenName: row.productName,
           lastSeenAt: new Date(),
@@ -110,11 +129,36 @@ export async function enrichSkus(options: EnrichArgs & { db?: Db }): Promise<Enr
             matchConfidence: confidenceNum.toFixed(2),
             updatedAt: new Date(),
           },
-        });
+        })
+        .returning({ id: retailerSkus.id });
       upserts += 1;
+
+      // Backfill the specials → retailer_skus link the offers join depends on.
+      // Nothing else writes specials.retailer_sku_id (persist leaves it null).
+      if (linked) {
+        const updated = await db
+          .update(specials)
+          .set({ retailerSkuId: linked.id })
+          .where(
+            and(
+              eq(specials.retailer, row.retailer),
+              row.retailerSku != null
+                ? eq(specials.retailerSku, row.retailerSku)
+                : and(
+                    isNull(specials.retailerSku),
+                    eq(specials.productName, row.productName),
+                    row.sizeText != null
+                      ? eq(specials.sizeText, row.sizeText)
+                      : isNull(specials.sizeText),
+                  ),
+            ),
+          )
+          .returning({ id: specials.id });
+        specialsLinked += updated.length;
+      }
     }
 
-    return { ok: true, considered, bands, upserts, dryRun: options.dryRun };
+    return { ok: true, considered, bands, upserts, specialsLinked, dryRun: options.dryRun };
   } finally {
     if (shouldClose && sqlClient) await sqlClient.end({ timeout: 5 });
   }

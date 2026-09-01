@@ -50,6 +50,9 @@ export async function loadOffersForCanonicalIds(
   const now = options.now ?? new Date();
   const today = now.toISOString().slice(0, 10);
   const state = options.state ?? null;
+  // Postgres array literal — a JS array param serializes as a scalar here,
+  // same workaround as the vector literal in matching/db.ts.
+  const idsLiteral = `{${ids.join(',')}}`;
 
   const rows = await db.execute<OfferRow>(sql`
     select distinct on (rs.canonical_product_id, s.retailer)
@@ -72,7 +75,7 @@ export async function loadOffersForCanonicalIds(
     from public.specials s
     join public.retailer_skus rs on rs.id = s.retailer_sku_id
     join public.catalogues c on c.id = s.catalogue_id
-    where rs.canonical_product_id = any(${ids}::uuid[])
+    where rs.canonical_product_id = any(${idsLiteral}::uuid[])
       and (s.valid_from is null or s.valid_from <= ${today}::date)
       and (
         s.valid_to >= ${today}::date
