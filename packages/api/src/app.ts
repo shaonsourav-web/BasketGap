@@ -8,6 +8,7 @@ import {
   loadOffers,
   resolveState,
 } from './lib/infra.ts';
+import { isProductionRuntime } from './lib/env.ts';
 import { captureApiException } from './lib/sentry.ts';
 import { createCorsMiddleware } from './middleware/cors.ts';
 import { rateLimitMiddleware } from './middleware/rate-limit.ts';
@@ -46,7 +47,9 @@ app.use(
   }),
 );
 
-app.use('/match', rateLimitMiddleware(safeGetLimiter));
+// In production an unconfigured limiter is a fault, not a licence to serve
+// unlimited traffic: fail closed with 503. Preview/dev still pass through.
+app.use('/match', rateLimitMiddleware(safeGetLimiter, { requireLimiter: isProductionRuntime() }));
 
 app.route(
   '/match',

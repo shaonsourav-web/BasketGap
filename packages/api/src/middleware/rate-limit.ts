@@ -31,16 +31,43 @@ export function buildLimiter(cfg: RateLimitConfig): RateLimiterLike | null {
   });
 }
 
-export function rateLimitMiddleware(getLimiter: () => RateLimiterLike | null) {
+export interface RateLimitMiddlewareOptions {
+  /**
+   * Fail closed: when true and no limiter is configured, the request is
+   * rejected with 503 instead of passing through unlimited. app.ts computes
+   * this from the runtime environment (true in production) and passes it in,
+   * so the behaviour is unit-testable without mutating process.env.
+   */
+  requireLimiter?: boolean;
+}
+
+export function rateLimitMiddleware(
+  getLimiter: () => RateLimiterLike | null,
+  options: RateLimitMiddlewareOptions = {},
+) {
+  const requireLimiter = options.requireLimiter ?? false;
   return createMiddleware<{ Variables: ApiVariables }>(async (c, next) => {
     const limiter = getLimiter();
     if (!limiter) {
+      if (requireLimiter) {
+        return c.json(
+          {
+            error: {
+              message: 'Rate limiting is unavailable',
+              code: 'RATE_LIMIT_UNAVAILABLE',
+              request_id: c.get('requestId'),
+            },
+          },
+          503,
+        );
+      }
       await next();
       return;
     }
-    const ipHash = c.get('ipHash');
-    const deviceIdHash = c.get('deviceIdHash');
-    const key = `${ipHash}:${deviceIdHash}`;
+    // The key is the IP hash ALONE. x-device-id is client-controlled, so
+    // including it would let a caller mint a fresh bucket per request; the
+    // device hash stays on the context for logging only.
+    const key = c.get('ipHash');
     const verdict = await limiter.limit(key);
 
     c.header('X-RateLimit-Limit', String(verdict.limit));
