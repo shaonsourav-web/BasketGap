@@ -1,7 +1,13 @@
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 
-import { getApiEnv, getMatchingContext, getRateLimiter } from './lib/infra.ts';
+import {
+  getApiEnv,
+  getMatchingContext,
+  getRateLimiter,
+  loadOffers,
+  resolveState,
+} from './lib/infra.ts';
 import { captureApiException } from './lib/sentry.ts';
 import { createCorsMiddleware } from './middleware/cors.ts';
 import { rateLimitMiddleware } from './middleware/rate-limit.ts';
@@ -47,6 +53,8 @@ app.route(
   createMatchRoute({
     getContext: getMatchingContext,
     getMaxLlmCalls: () => safeLoadEnv()?.MAX_LLM_CALLS_PER_REQUEST ?? 10,
+    loadOffers,
+    resolveState,
   }),
 );
 

@@ -31,6 +31,8 @@ vi.mock('../lib/infra.ts', () => ({
     ALLOWED_ORIGINS: 'https://app.basketgap.test,https://staging.basketgap.test',
   })),
   getRateLimiter: vi.fn(() => mockLimiter.current),
+  loadOffers: vi.fn(async () => new Map()),
+  resolveState: vi.fn(async () => null),
   resetInfraForTests: vi.fn(),
 }));
 

@@ -1,6 +1,11 @@
 import { createDb, createSqlClient, type Db, type SqlClient } from '@basketgap/shared/db';
 import { createDbContext } from '@basketgap/shared/matching/db';
 import type { PipelineContext } from '@basketgap/shared/matching/types';
+import {
+  loadOffersForCanonicalIds,
+  resolveStateForPostcode,
+  type ProductOffers,
+} from '@basketgap/shared/pricing';
 
 import { buildLimiter, type RateLimiterLike } from '../middleware/rate-limit.ts';
 import { loadApiEnv, type ApiEnv } from './env.ts';
@@ -32,6 +37,17 @@ export function getMatchingContext(): PipelineContext {
     openRouterKey: env.OPENROUTER_API_KEY,
     openRouterModel: env.OPENROUTER_MODEL,
   });
+}
+
+export function loadOffers(
+  canonicalProductIds: string[],
+  state: string | null,
+): Promise<Map<string, ProductOffers>> {
+  return loadOffersForCanonicalIds(getDb(), canonicalProductIds, { state });
+}
+
+export function resolveState(postcode: string): Promise<string | null> {
+  return resolveStateForPostcode(getDb(), postcode);
 }
 
 export function getRateLimiter(): RateLimiterLike | null {

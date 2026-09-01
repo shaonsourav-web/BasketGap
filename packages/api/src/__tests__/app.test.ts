@@ -9,6 +9,13 @@ vi.mock('@basketgap/shared/matching/pipeline', () => ({
   matchBasket: vi.fn(),
 }));
 
+const mockLoadOffers = vi.fn<
+  (ids: string[], state: string | null) => Promise<Map<string, unknown>>
+>(async (_ids, _state) => new Map());
+const mockResolveState = vi.fn<(postcode: string) => Promise<string | null>>(
+  async (_postcode) => null,
+);
+
 vi.mock('../lib/infra.ts', () => ({
   getMatchingContext: vi.fn(() => ({})),
   getDb: vi.fn(() => ({})),
@@ -17,6 +24,8 @@ vi.mock('../lib/infra.ts', () => ({
     MAX_LLM_CALLS_PER_REQUEST: 10,
   })),
   getRateLimiter: vi.fn(() => null),
+  loadOffers: (...args: unknown[]) => mockLoadOffers(...(args as [string[], string | null])),
+  resolveState: (...args: unknown[]) => mockResolveState(...(args as [string])),
   resetInfraForTests: vi.fn(),
 }));
 
@@ -30,6 +39,10 @@ beforeAll(async () => {
 
 beforeEach(() => {
   mockedMatchBasket.mockReset();
+  mockLoadOffers.mockReset();
+  mockLoadOffers.mockResolvedValue(new Map());
+  mockResolveState.mockReset();
+  mockResolveState.mockResolvedValue(null);
 });
 
 function fakeResult(over: Partial<MatchResult> = {}): MatchResult {
@@ -98,6 +111,94 @@ describe('POST /api/match — happy path', () => {
     };
     expect(body.stats.cached).toBe(1);
     expect(body.stats.llm_calls).toBe(1);
+  });
+});
+
+describe('POST /api/match — offers', () => {
+  const colesOffer = {
+    retailer: 'coles',
+    specialPrice: 4.5,
+    regularPrice: 9,
+    savingsAmount: 4.5,
+    savingsPercent: 50,
+    promoType: 'half_price',
+    promoLabel: '1/2 Price',
+    multiBuy: false,
+    memberLocked: false,
+    productName: 'Choc Block 180g',
+    sizeText: '180g',
+    state: null,
+    sourceLabel: 'coles-weekly',
+    validTo: '2026-09-02',
+    fetchedAt: '2026-08-27 09:00:00+10',
+  };
+
+  it('attaches offers to matched lines and counts on_special', async () => {
+    mockedMatchBasket.mockResolvedValueOnce([
+      fakeResult({ canonicalProductId: 'cid-1' }),
+      fakeResult({ raw: 'unknown thing', band: 'needs_attention', canonicalProductId: null }),
+    ]);
+    mockLoadOffers.mockResolvedValueOnce(
+      new Map([['cid-1', { canonicalProductId: 'cid-1', coles: colesOffer, woolworths: null }]]),
+    );
+    const res = await app.request('/api/match', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ lines: ['choc block', 'unknown thing'] }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      results: { offers: { coles: { specialPrice: number } | null } | null }[];
+      stats: { on_special: number; offers_available: boolean };
+    };
+    expect(body.results[0]?.offers?.coles?.specialPrice).toBe(4.5);
+    expect(body.results[1]?.offers).toBeNull();
+    expect(body.stats.on_special).toBe(1);
+    expect(body.stats.offers_available).toBe(true);
+  });
+
+  it('resolves postcode to state and passes it to loadOffers', async () => {
+    mockedMatchBasket.mockResolvedValueOnce([fakeResult({ canonicalProductId: 'cid-1' })]);
+    mockResolveState.mockResolvedValueOnce('VIC');
+    const res = await app.request('/api/match', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ lines: ['choc block'], postcode: '3000' }),
+    });
+    expect(res.status).toBe(200);
+    expect(mockResolveState).toHaveBeenCalledWith('3000');
+    expect(mockLoadOffers).toHaveBeenCalledWith(['cid-1'], 'VIC');
+  });
+
+  it('skips the offers query entirely when nothing matched', async () => {
+    mockedMatchBasket.mockResolvedValueOnce([
+      fakeResult({ band: 'needs_attention', canonicalProductId: null }),
+    ]);
+    const res = await app.request('/api/match', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ lines: ['??'] }),
+    });
+    expect(res.status).toBe(200);
+    expect(mockLoadOffers).not.toHaveBeenCalled();
+  });
+
+  it('degrades to offers: null with offers_available=false when the offers query fails', async () => {
+    mockedMatchBasket.mockResolvedValueOnce([fakeResult({ canonicalProductId: 'cid-1' })]);
+    mockLoadOffers.mockRejectedValueOnce(new Error('db down at 10.0.0.5'));
+    const res = await app.request('/api/match', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ lines: ['choc block'] }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      results: { offers: unknown }[];
+      stats: { offers_available: boolean };
+    };
+    expect(body.results[0]?.offers).toBeNull();
+    expect(body.stats.offers_available).toBe(false);
+    expect(JSON.stringify(body)).not.toContain('10.0.0.5');
   });
 });
 
