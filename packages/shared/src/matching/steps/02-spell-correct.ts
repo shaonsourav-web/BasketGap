@@ -27,6 +27,8 @@ const PROTECTED_WORDS = new Set([
   'small',
   'large',
   'litter',
+  // one substitution from the shorthand key "parmy" → Parmesan Cheese
+  'party',
 ]);
 
 /**

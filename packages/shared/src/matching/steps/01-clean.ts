@@ -25,7 +25,7 @@ const RETAILER_NOISE = /\b(coles|woolworths|woolies|woolys|aldi|iga|costco)\b/g;
 // confidence): raw (raw vs White Sugar), plain (Plain Flour), grated/shredded
 // (grated cheese ≠ a specific block). QC 2026-09-01 F2.
 const DESCRIPTOR_NOISE =
-  /\b(fresh|boneless|seedless|spreadable|squeezy|button|hass|loose|continental|tub|jar|packet|sleeve|bunch|bulb|punnet|for|the|some|my|a|an|of|big|small|hot|pouring)\b/g;
+  /\b(fresh|boneless|seedless|spreadable|squeezy|button|hass|loose|continental|tub|jar|packet|sleeve|bunch|bulb|punnet|for|the|some|my|a|an|of|big|small|hot|pouring|brand)\b/g;
 const CONTAINER_OF =
   /\b(bag|bags|box|boxes|tin|can|jar|bottle|punnet|head|pack|packs|loaf|loaves)s? of\b/g;
 
