@@ -21,7 +21,7 @@
     "db:pull": "tsx --env-file=../../.env.local node_modules/.bin/drizzle-kit pull"
   },
   "dependencies": {
-    "@sentry/node": "10.53.1",
+    "@sentry/node": "10.70.0",
     "drizzle-orm": "0.45.2",
     "postgres": "3.4.9",
     "zod": "4.4.3"

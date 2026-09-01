@@ -2,7 +2,7 @@
 
 ## Context
 
-Round 8 (Vercel-hosted `/match` API) is **built and green locally** but **uncommitted and undeployed**. A deep review of the matching engine — the product's core value — found it is roughly **4–5/10 for production**: the architecture is sound (deterministic-first, hybrid trigram+vector, strict LLM containment, auditable), but the _effective_ quality is far below what its confidence labels imply.
+When this plan was written, Round 8 (Vercel-hosted `/match` API) was built and green locally but uncommitted and undeployed. A deep review of the matching engine — the product's core value — found it roughly **4–5/10 for production**: the architecture was sound (deterministic-first, hybrid trigram+vector, strict LLM containment, auditable), but the _effective_ quality was far below what its confidence labels implied.
 
 The user's priority is explicit: **quality before deploy**, and **"super easy to use, customer satisfaction is the utmost priority."** The worst customer experience is typing a normal grocery item and getting silence / `needs_attention`. So we do **Round 8.5 (engine hardening + a way to measure quality + a real catalogue)** _before_ committing and deploying Round 8.
 
@@ -10,11 +10,12 @@ This plan is the pre-production checklist the user asked for: every fix, every d
 
 ## Verified current state (facts, not assumptions)
 
-- `pnpm -r typecheck | lint | test` and `pnpm format:check` all **pass** (138 tests: shared 85, workers 34, api 19).
+- **Audit update, 2026-08-24:** Round 8/8.5 is now split across seven local commits ahead of `origin/main`; it remains unpushed and undeployed.
+- Before the cleanup pass, `pnpm -r typecheck | lint | test` and `pnpm format:check` all passed (262 passing, 18 conditionally skipped tests across shared, workers, and API).
 - `workers→shared` refactor is **clean** — no dangling imports, no leftover copies.
-- **Nothing is committed.** `packages/api/` and parts of `packages/shared/` are untracked (~61 changed/untracked paths).
 - **No `.vercel/` link**, no Upstash, no env in Vercel — not deployed.
 - **The database ships empty** — no canonical seed loaded, no specials ingested, no SKUs enriched. `/match` returns `needs_attention` for everything until the data pipeline runs.
+- **The API response has no retailer-price aggregation yet.** Even with populated data, `/api/match` currently returns canonical-match metadata rather than the Coles/Woolworths comparison promised by the product flow.
 - API DB client is `postgres(url, { prepare: false, max: 1 })` — correct for serverless + Supabase pooler.
 - Ingest crons (`ingest-*.yml`) run Tue/Wed AU time and read `secrets.DATABASE_URL` + `secrets.SENTRY_DSN`. **No `enrich-skus` cron exists.**
 
@@ -161,7 +162,7 @@ Strict order (each depends on the prior):
 - [ ] Upstash rate-limit verified live (30 req/60s per (ip,device)); confirm graceful behavior if Upstash is down
 - [ ] Sentry DSN wired for API + workers (recommended for launch)
 - [ ] Legal/ToS sanity check on scraping Coles/Woolies catalogues (out of code scope — user awareness)
-- [ ] Docs: `docs/decisions.md` + `README.md` Round 8/8.5 entries
+- [x] Docs: `docs/decisions.md` + `README.md` Round 8/8.5 entries
 - [ ] Commit (recommend **3 commits**: `refactor(shared)`, `feat(api)` Round 8, `fix(matching)` Round 8.5), push to `main`, CI green
 - [ ] Memory: write `project_basketgap_round8.md` + update `MEMORY.md`
 

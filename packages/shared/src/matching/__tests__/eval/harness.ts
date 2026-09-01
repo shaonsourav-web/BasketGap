@@ -65,7 +65,7 @@ export async function runEval(
       line: labelled.line,
       expected: labelled.expected,
       actual: result.band === 'needs_attention' ? null : actual,
-      actualId: result.band === 'needs_attention' ? null : result.canonicalProductId,
+      actualId: result.canonicalProductId,
       band: result.band,
       decidedBy: result.decidedBy,
       score: Math.round((result.top?.finalScore ?? 0) * 1000) / 1000,

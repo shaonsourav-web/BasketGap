@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/node';
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 let sentryInitialized = false;
+let sentryEnabled = false;
 
 export interface InitObservabilityOptions {
   dsn?: string | undefined;
@@ -15,6 +16,7 @@ export function initObservability(opts: InitObservabilityOptions = {}): void {
   const environment = opts.environment ?? process.env.NODE_ENV ?? 'production';
   if (dsn && dsn.length > 0) {
     Sentry.init({ dsn, tracesSampleRate: 0, environment });
+    sentryEnabled = true;
   }
   sentryInitialized = true;
 }
@@ -28,7 +30,7 @@ export function captureException(err: unknown, meta?: Record<string, unknown>): 
   const message = err instanceof Error ? err.message : String(err);
   const stack = err instanceof Error ? err.stack : undefined;
   log('error', message, { ...(meta ?? {}), ...(stack ? { stack } : {}) });
-  if (sentryInitialized) {
+  if (sentryEnabled) {
     Sentry.captureException(err, meta ? { extra: meta } : undefined);
   }
 }

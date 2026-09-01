@@ -109,15 +109,24 @@ Root (fans out across the `pnpm-workspace.yaml` packages):
 - `pnpm -r lint` / `pnpm -r typecheck` / `pnpm -r test`
 - `pnpm format` / `pnpm format:check`
 
-`packages/workers` (the only workspace package today; `apps/*` and
-`packages/*` are reserved for future siblings per `docs/decisions.md`):
+Workspace packages:
+
+- `@basketgap/shared` — database schema, matching engine, eval harness, and playground
+- `@basketgap/workers` — ingestion, canonical seed, SKU enrichment, and matching CLI
+- `@basketgap/api` — Hono `/api/match` API and Vercel/Node adapters
+
+Package commands:
 
 - `pnpm --filter @basketgap/workers ping`
 - `pnpm --filter @basketgap/workers ingest coles-pdf|woolies-pdf|coles-web|woolies-web [--fixture <path> | --source-url <url>] [--dry-run] [--force-refresh]`
 - `pnpm --filter @basketgap/workers exec tsx src/cli.ts match --line "<text>" | --list <file>|-`
 - `pnpm --filter @basketgap/workers exec tsx src/cli.ts seed canonical [--dry-run] [--force-refresh]`
 - `pnpm --filter @basketgap/workers exec tsx src/cli.ts enrich-skus [--retailer coles|woolies] [--limit N] [--dry-run]`
-- `pnpm --filter @basketgap/workers db:pull` (Drizzle schema pull)
+- `pnpm --filter @basketgap/shared db:pull` (Drizzle schema pull)
+- `pnpm --filter @basketgap/shared test:eval`
+- `pnpm --filter @basketgap/shared playground`
+- `pnpm --filter @basketgap/api dev` (Vercel development server)
+- `pnpm --filter @basketgap/api dev:node` (standalone Node development server)
 
 All of the above read `.env.local` at the repo root via `--env-file`; it
 currently holds placeholders (see project notes) — real

@@ -32,7 +32,7 @@
 - **DB access from workers: Drizzle ORM + postgres-js, transaction pooler 6543.**
   `@supabase/supabase-js` is not used in workers — that client is reserved for the eventual mobile/API surfaces. postgres-js is configured with `{ prepare: false, max: 1 }`: pgbouncer transaction mode does not support cross-transaction prepared statements, and cron workers are ephemeral so a single connection is the right shape. Pooler hostname is region-specific (`aws-N-REGION.pooler.supabase.com` for this project); copy the exact connection string from Supabase dashboard → Connect → Transaction pooler rather than hand-assembling.
 
-- **Drizzle schema hand-written at `packages/workers/src/db/schema.ts`, not pulled.**
+- **Drizzle schema hand-written (now at `packages/shared/src/db/schema.ts`), not pulled.**
   Plan called for `drizzle-kit pull` to bootstrap the schema file. drizzle-kit 0.31.10 crashes parsing this DB's CHECK constraints (`Cannot read properties of undefined (reading 'replace')` at bin.cjs:17861), and the 1.0.0-rc.2 line requires a drizzle-orm bump that introduces incompatible internal subpath exports. Hand-writing from a direct `information_schema` introspection is the path the plan reserves for the matching-engine round (when Drizzle becomes hand-evolved + `generate`); we just arrive there earlier. Supabase migrations under `supabase/migrations/` remain the single source of truth — any schema change re-runs the introspection and updates `schema.ts` accordingly. CI drift check still deferred.
 
 - **Sentry installed but not initialized this round.**
@@ -198,3 +198,17 @@
 
 - **Round 8.5 A9 result: 85.6% → 99.0% overall on the eval harness, offline path.**
   `matched` precision held at 100%, the single wrong pick went to 0, out-of-catalogue deferral held at 100%. Steps were not reordered and `BAND_THRESHOLDS` / `RANK_WEIGHTS` were not touched — this was entirely step-internal, which is what makes the before/after comparable. Full table in `docs/round-8.5-engine-hardening.md`. Two false negatives remain on purpose (`"icecream 2l"` needs compound splitting; `"bbq snags 500g"` needs semantics only the vector/LLM path can supply) so the harness keeps something to fail on rather than reading 100% and going quiet.
+
+## 2026-08-24
+
+- **`needs_attention` is a decline, never a selected identity or cache record.**
+  The pipeline now returns `canonicalProductId: null`, skips cache writes, and ignores any stale low-confidence cache entry when the score is below the assumed threshold. The eval harness records the actual returned ID rather than masking it, so this contract is enforced by both focused and 200-line regression tests.
+
+- **Shopping-list text is untrusted LLM data.**
+  The OpenRouter system prompt explicitly forbids following instructions found in the shopping-list line or shortlist. Shortlist membership validation remains the hard output boundary.
+
+- **API development supports both Vercel and standalone Node adapters.**
+  `pnpm --filter @basketgap/api dev` exercises Vercel routing; `dev:node` runs the same Hono app with `@hono/node-server`. Vercel framework detection is disabled explicitly because the package supplies its own catch-all function.
+
+- **Security patch versions are pinned without broad dependency churn.**
+  Hono, its Zod validator, Sentry, and Upstash were updated within their current architecture. Workspace overrides pin patched `undici` and `brace-expansion` transitive versions until their parents absorb those releases. Production audit and peer checks are clean after the change.

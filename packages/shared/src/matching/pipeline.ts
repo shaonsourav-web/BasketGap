@@ -37,7 +37,7 @@ export async function matchLine(raw: string, ctx: PipelineContext): Promise<Matc
   );
 
   const cached = await stepAuditAsync(audit, 'cache-read', () => ctx.readCache(cleanedInputHash));
-  if (cached) {
+  if (cached && cached.confidenceBand !== 'needs_attention') {
     return finalise({
       raw,
       cleaned: cleanedForMatch,
@@ -107,16 +107,18 @@ export async function matchLine(raw: string, ctx: PipelineContext): Promise<Matc
     cleanedInputHash,
     band,
     decidedBy,
-    canonicalProductId: top?.canonicalProductId ?? null,
+    canonicalProductId: band === 'needs_attention' ? null : (top?.canonicalProductId ?? null),
     top,
     alternatives: ranked,
     audit,
     t0,
   });
 
-  await stepAuditAsync(audit, 'cache-write', () =>
-    ctx.writeCache(cleanedInputHash, cleanedForMatch, result),
-  );
+  if (band !== 'needs_attention') {
+    await stepAuditAsync(audit, 'cache-write', () =>
+      ctx.writeCache(cleanedInputHash, cleanedForMatch, result),
+    );
+  }
   return result;
 }
 

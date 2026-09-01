@@ -74,6 +74,57 @@ describe('matchLine pipeline', () => {
     expect(result.canonicalProductId).toBeNull();
   });
 
+  it('does not expose a canonical product id for a low-confidence candidate', async () => {
+    const ctx = buildCtx({
+      loadCandidatesByName: vi.fn(async () => [
+        {
+          id: 'weak-candidate',
+          name: 'Weak Candidate',
+          brand: null,
+          category: 'other',
+          unitSizeValue: null,
+          unitSizeUom: null,
+          textSimilarity: 0.4,
+        },
+      ]),
+    });
+
+    const result = await matchLine('mystery item', ctx);
+
+    expect(result.band).toBe('needs_attention');
+    expect(result.canonicalProductId).toBeNull();
+  });
+
+  it('does not cache a low-confidence result', async () => {
+    const writeCache = vi.fn<PipelineContext['writeCache']>();
+    const ctx = buildCtx({ writeCache });
+
+    const result = await matchLine('xqzy zzgh blah', ctx);
+
+    expect(result.band).toBe('needs_attention');
+    expect(writeCache).not.toHaveBeenCalled();
+  });
+
+  it('ignores a stale low-confidence cache entry', async () => {
+    const loadCandidatesByName = vi.fn(async () => []);
+    const staleCache: CachedMatch = {
+      canonicalProductId: 'stale-wrong-id',
+      confidenceBand: 'needs_attention',
+      alternatives: [],
+      decidedBy: 'rank',
+    };
+    const ctx = buildCtx({
+      readCache: vi.fn(async () => staleCache),
+      loadCandidatesByName,
+    });
+
+    const result = await matchLine('mystery item', ctx);
+
+    expect(loadCandidatesByName).toHaveBeenCalled();
+    expect(result.decidedBy).toBe('none');
+    expect(result.canonicalProductId).toBeNull();
+  });
+
   it('cache hit short-circuits the pipeline on repeat input', async () => {
     const ctx = buildCtx({
       loadCandidatesByName: vi.fn(async () => [

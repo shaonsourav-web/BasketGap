@@ -2,6 +2,10 @@ packages:
   - 'packages/*'
   - 'apps/*'
 
+overrides:
+  brace-expansion: 5.0.9
+  undici: 7.29.0
+
 # Build scripts allowed to execute during install.
 # pnpm 11 requires explicit allowlisting for security.
 # - esbuild: native binary download for tsx/vitest bundlers
