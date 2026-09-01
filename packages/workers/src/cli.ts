@@ -2,6 +2,7 @@ import { runEnrichSkus } from './commands/enrich-skus.ts';
 import { runIngest } from './commands/ingest.ts';
 import { runMatch } from './commands/match.ts';
 import { runPing } from './commands/ping.ts';
+import { runPruneCache } from './commands/prune-cache.ts';
 import { runSeedCanonical } from './commands/seed-canonical.ts';
 import { initObservability } from '@basketgap/shared/lib/observability';
 
@@ -13,6 +14,7 @@ Commands:
   seed canonical             Embed + upsert the canonical product seed (requires GEMINI_API_KEY; supports --dry-run, --force-refresh).
   match --line "<text>"      Match a single shopping-list line via the deterministic-first pipeline.
   match --list <file>|-      Match every newline-separated line from a file or stdin.
+  prune-cache                Bound match_cache growth (supports --max-age-days, --max-rows).
   enrich-skus                Map existing specials.retailer_sku → canonical_products.id (supports --retailer, --limit, --dry-run).
 `;
 
@@ -32,6 +34,8 @@ async function main(argv: string[]): Promise<number> {
     }
     case 'match':
       return runMatch(rest);
+    case 'prune-cache':
+      return runPruneCache(rest);
     case 'enrich-skus':
       return runEnrichSkus(rest);
     case undefined:

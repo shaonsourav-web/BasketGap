@@ -295,3 +295,55 @@
   $0.30 / 1M input tokens, $2.50 / 1M output tokens → ≈ $0.00017 per
   disambiguation call, ≈ $0.0017 for a request that exhausts the default cap of 10. `withLlmCap` semantics are untouched. Spend ceilings now live in one place
   (Google AI Studio / Cloud billing) instead of two dashboards.
+
+## 2026-09-02 — security hardening (rate limiting, cache growth bound)
+
+- **The rate-limit bucket is the client IP hash alone.** The key was
+  `${ipHash}:${deviceIdHash}`, but `x-device-id` is a client-supplied header:
+  any caller could rotate it per request and mint an unlimited number of fresh
+  buckets, which made the limiter decorative. The key is now `ipHash` only.
+  `deviceIdHash` stays on the request context for logging and is no longer part
+  of any enforcement decision.
+
+- **The API fails closed in production when the limiter is unconfigured.**
+  Previously a missing `UPSTASH_REDIS_REST_URL`/`_TOKEN` silently degraded
+  `/api/match` to unlimited traffic — a config slip on a paid, LLM-backed
+  endpoint would have been an open spend tap. `rateLimitMiddleware` now takes an
+  explicit `{ requireLimiter }` option, computed in `app.ts` from
+  `isProductionRuntime()` (`VERCEL_ENV === 'production' || NODE_ENV ===
+'production'`); when it is true and no limiter exists the route answers
+  `503 { error: { code: 'RATE_LIMIT_UNAVAILABLE' } }`. Preview and local dev keep
+  the old pass-through, so nothing about the developer loop changes. The option
+  is passed in rather than read from `process.env` inside the middleware so the
+  three cases are unit-testable without mutating the environment.
+
+- **Client IP derivation follows a fixed trust order.** `x-vercel-forwarded-for`
+  (platform-set, not forwardable by callers) → `x-real-ip` → the **first** entry
+  of `x-forwarded-for` → `'unknown'`; values are trimmed and capped at 64 chars.
+  The old code read `x-forwarded-for` first, which a caller can set outright, and
+  the cap stops an oversized header from bloating the hash input. First entry, not
+  last: the last hop is the proxy, and letting a caller append entries would let
+  them choose their own bucket.
+
+- **`match_cache` is now bounded.** Nothing in the write path ever deleted a row,
+  so the table grew one row per distinct cleaned input forever.
+  `pruneMatchCache(db, {maxAgeDays = 90, maxRows = 200000})`
+  (`packages/shared/src/matching/cache-prune.ts`) ages out rows whose
+  `last_used_at` is past the cutoff, then — only if the table is still over the
+  ceiling — drops the least-recently-used rows down to the cap, returning
+  `{deletedByAge, deletedByCap, remaining}`. Both passes key off `last_used_at`,
+  which `readCache` bumps on every hit, so "cold" means genuinely unused rather
+  than merely old. Exposed as `workers prune-cache [--max-age-days N]
+[--max-rows N]` and run weekly by `.github/workflows/prune-cache.yml` at
+  `0 22 * * 2` — after the 20:00/21:00 UTC ingest crons, so a prune never races a
+  run that is still writing cache rows. Matching behaviour, bands, weights and
+  step order are untouched: pruning only removes cache entries, and a pruned
+  entry is recomputed on next sight.
+
+- **`match_cache.cleaned_input` capped at 256 chars in the database**
+  (migration `20260902000000_round9_match_cache_input_cap.sql`). The API already
+  rejects basket lines over 200 chars and cleaning only shortens a line, so this
+  is belt and braces: a future writer that bypasses the API schema cannot turn
+  the cache into unbounded text storage. Declared as a table constraint only —
+  `schema.ts` does not declare the existing `match_cache` checks either, so it
+  stays the migration's business.

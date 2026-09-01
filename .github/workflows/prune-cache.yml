@@ -1,0 +1,62 @@
+name: Prune Match Cache
+
+on:
+  # Weekly, after the Tuesday-night UTC ingest crons (20:00 / 21:00 UTC) have
+  # finished, so the prune never races a run that is still writing cache rows.
+  # GitHub cron is UTC and does NOT follow DST: 22:00 UTC Tuesday lands at
+  # Wed 08:00 AEST / Wed 09:00 AEDT in Sydney.
+  schedule:
+    - cron: '0 22 * * 2'
+  workflow_dispatch:
+    inputs:
+      max_age_days:
+        description: 'Drop rows unused for more than this many days (default 90).'
+        required: false
+      max_rows:
+        description: 'Hard ceiling on surviving rows (default 200000).'
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prune-cache
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    name: Prune match_cache
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run prune
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          MAX_AGE_DAYS: ${{ github.event.inputs.max_age_days }}
+          MAX_ROWS: ${{ github.event.inputs.max_rows }}
+        run: |
+          set -uo pipefail
+          FLAGS=""
+          if [ -n "$MAX_AGE_DAYS" ]; then
+            FLAGS="$FLAGS --max-age-days $MAX_AGE_DAYS"
+          fi
+          if [ -n "$MAX_ROWS" ]; then
+            FLAGS="$FLAGS --max-rows $MAX_ROWS"
+          fi
+          pnpm --filter @basketgap/workers exec tsx src/cli.ts prune-cache $FLAGS

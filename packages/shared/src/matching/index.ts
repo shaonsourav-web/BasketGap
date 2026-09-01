@@ -19,5 +19,7 @@ export type { ShorthandExpansion } from './steps/03-shorthand.ts';
 export { extractQuantitySize } from './steps/04-quantity-size.ts';
 export { rankCandidates } from './steps/07-rank.ts';
 export { buildCacheKey, hashCleanedInput } from './steps/09-cache.ts';
+export { pruneMatchCache, DEFAULT_MAX_AGE_DAYS, DEFAULT_MAX_ROWS } from './cache-prune.ts';
+export type { PruneMatchCacheOptions, PruneMatchCacheResult } from './cache-prune.ts';
 export { CANONICAL_SEED } from './seed/canonical-seed.ts';
 export { deterministicUuid } from './seed/uuid.ts';
