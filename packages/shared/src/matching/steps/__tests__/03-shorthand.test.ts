@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { HEAD_DEFAULTS, SHORTHAND } from '../../dictionaries/shorthand.ts';
 import { CANONICAL_SEED } from '../../seed/canonical-seed.ts';
-import { expandShorthand } from '../03-shorthand.ts';
+import { expandShorthand, expandShorthandDetailed } from '../03-shorthand.ts';
 
 describe('expandShorthand', () => {
   it.each([
@@ -96,6 +96,50 @@ describe('head defaults', () => {
     ['stuff for dinner', 'stuff for dinner'],
   ])('leaves %j alone', (input, expected) => {
     expect(expandShorthand(input)).toBe(expected);
+  });
+});
+
+// The pipeline caps the confidence band at `assumed` whenever a head default
+// fired, so the flag reporting it must be exact: set for bare generic heads
+// (with or without trailing size/pack tokens) and clear for every line where
+// the shopper's own words picked the variant.
+describe('head-default reporting', () => {
+  it.each([
+    ['coffee', 'coffee instant'],
+    ['rice', 'long grain white rice'],
+    ['milk 1 L', 'full cream milk 1 L'],
+    ['potatoes 2 kg', 'potatoes washed 2 kg'],
+    ['almond milk', 'almond milk unsweetened'],
+    // Reached through SHORTHAND first, then the head default on the result.
+    ['spuds 2 kg', 'potatoes washed 2 kg'],
+    ['pb', 'peanut butter smooth'],
+  ])('flags %j as a head-default resolution', (input, expanded) => {
+    const out = expandShorthandDetailed(input);
+    expect(out.expanded).toBe(expanded);
+    expect(out.headDefaultApplied).toBe(true);
+    expect(out.headDefaultNote).not.toBe('');
+  });
+
+  it.each([
+    'coffee instant 200 g',
+    'skim milk 1 L',
+    'soy milk',
+    'bega tasty 500 g',
+    'english breakfast tea bags',
+    'snacks',
+    '',
+  ])('does not flag %j', (input) => {
+    const out = expandShorthandDetailed(input);
+    expect(out.headDefaultApplied).toBe(false);
+    expect(out.headDefaultNote).toBe('');
+  });
+
+  it('the note names the head and the default it resolved to', () => {
+    expect(expandShorthandDetailed('coffee').headDefaultNote).toBe('coffee → coffee instant');
+  });
+
+  it('expandShorthand stays a plain string API', () => {
+    expect(expandShorthand('coffee')).toBe('coffee instant');
   });
 });
 

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { matchBasket, matchLine } from '../pipeline.ts';
+import { BAND_THRESHOLDS } from '../types.ts';
 import type { CachedMatch, MatchResult, PipelineContext, RawCandidateRow } from '../types.ts';
 
 function buildCtx(overrides: Partial<PipelineContext> = {}): PipelineContext {
@@ -260,5 +261,77 @@ describe('matchLine pipeline', () => {
     expect(steps).toContain('clean');
     expect(steps).toContain('rank');
     expect(steps).toContain('total');
+  });
+});
+
+// A bare generic head is resolved to the catalogue's default variant, which is
+// the engine's assumption rather than the shopper's words — so however well it
+// scores it may not present as `matched`.
+describe('head-default band cap', () => {
+  function perfectCtx(id: string, name: string) {
+    return buildCtx({
+      loadCandidatesByName: vi.fn(async () => [
+        {
+          id,
+          name,
+          brand: null,
+          category: null,
+          unitSizeValue: null,
+          unitSizeUom: null,
+          textSimilarity: 1.0,
+        },
+      ]),
+    });
+  }
+
+  it('caps a bare generic head at assumed even on a perfect text match', async () => {
+    const ctx = perfectCtx('coffee-instant', 'Coffee Instant');
+    const result = await matchLine('coffee', ctx);
+    expect(result.cleaned).toBe('coffee instant');
+    expect(result.canonicalProductId).toBe('coffee-instant');
+    expect(result.top!.finalScore).toBeGreaterThanOrEqual(BAND_THRESHOLDS.matched);
+    expect(result.band).toBe('assumed');
+    const cap = result.audit.find((a) => a.step === 'head-default-band-cap');
+    expect(cap).toBeDefined();
+    expect(result.audit.find((a) => a.step === 'shorthand')!.notes).toContain(
+      'coffee → coffee instant',
+    );
+  });
+
+  it('caps a bare head carrying only size/pack tokens', async () => {
+    const ctx = perfectCtx('milk-1l', 'Full Cream Milk');
+    const result = await matchLine('milk 1L', ctx);
+    expect(result.band).toBe('assumed');
+  });
+
+  it('does not cap a line the shopper qualified themselves', async () => {
+    const ctx = perfectCtx('coffee-instant', 'Coffee Instant 200g');
+    const result = await matchLine('coffee instant 200g', ctx);
+    expect(result.band).toBe('matched');
+    expect(result.audit.some((a) => a.step === 'head-default-band-cap')).toBe(false);
+  });
+
+  it('does not cap a variant the head default never fires on', async () => {
+    const ctx = perfectCtx('skim-milk', 'Skim Milk');
+    const result = await matchLine('skim milk 1L', ctx);
+    expect(result.band).toBe('matched');
+  });
+
+  it('keeps a capped line out of the cache entry for the typed-in-full line', async () => {
+    const ctx = perfectCtx('coffee-instant', 'Coffee Instant');
+    const capped = await matchLine('coffee', ctx);
+    const typed = await matchLine('coffee instant', ctx);
+    expect(capped.cleanedInputHash).not.toBe(typed.cleanedInputHash);
+    expect(capped.band).toBe('assumed');
+    expect(typed.band).toBe('matched');
+    expect(typed.decidedBy).not.toBe('cache');
+  });
+
+  it('a cached capped line still reads back as assumed', async () => {
+    const ctx = perfectCtx('coffee-instant', 'Coffee Instant');
+    await matchLine('coffee', ctx);
+    const second = await matchLine('coffee', ctx);
+    expect(second.decidedBy).toBe('cache');
+    expect(second.band).toBe('assumed');
   });
 });

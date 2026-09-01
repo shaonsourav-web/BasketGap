@@ -17,6 +17,8 @@ export interface EvalOutcome {
   decidedBy: string;
   score: number;
   correct: boolean;
+  /** The band was held at `assumed` because a HEAD_DEFAULTS expansion fired. */
+  bandCapped: boolean;
   tags: string[];
 }
 
@@ -70,6 +72,7 @@ export async function runEval(
       decidedBy: result.decidedBy,
       score: Math.round((result.top?.finalScore ?? 0) * 1000) / 1000,
       correct: isCorrect(labelled.expected, actual, result.band),
+      bandCapped: result.audit.some((a) => a.step === 'head-default-band-cap'),
       tags: labelled.tags ?? [],
     });
   }

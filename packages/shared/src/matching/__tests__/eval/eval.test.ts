@@ -73,8 +73,12 @@ describe('matching eval harness', () => {
       if (o.band === 'matched') expect(o.score).toBeGreaterThanOrEqual(BAND_THRESHOLDS.matched);
       if (o.band === 'assumed') {
         expect(o.score).toBeGreaterThanOrEqual(BAND_THRESHOLDS.assumed);
-        expect(o.score).toBeLessThan(BAND_THRESHOLDS.matched);
+        // A bare generic head resolved via HEAD_DEFAULTS is held at `assumed`
+        // regardless of how well it scored, so a capped line legitimately
+        // carries a score at or above the `matched` threshold.
+        if (!o.bandCapped) expect(o.score).toBeLessThan(BAND_THRESHOLDS.matched);
       }
+      if (o.bandCapped) expect(o.band).toBe('assumed');
       if (o.band === 'needs_attention') expect(o.score).toBeLessThan(BAND_THRESHOLDS.assumed);
     }
   });

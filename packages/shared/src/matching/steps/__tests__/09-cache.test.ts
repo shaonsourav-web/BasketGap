@@ -48,4 +48,16 @@ describe('buildCacheKey', () => {
     const sized = buildCacheKey({ cleaned: 'milk', sizeValue: 2, sizeUom: 'L', quantity: null });
     expect(unsized).not.toBe(sized);
   });
+
+  it('separates a head-default resolution from the same text typed in full', () => {
+    const base = { cleaned: 'coffee instant', sizeValue: null, sizeUom: null, quantity: null };
+    // The head-default line's band is capped at `assumed`, so sharing an entry
+    // with the typed-in-full line would leak that cap to a confident match.
+    expect(buildCacheKey({ ...base, headDefaultApplied: true })).not.toBe(buildCacheKey(base));
+  });
+
+  it('leaves keys byte-identical when no head default fired', () => {
+    const base = { cleaned: 'coffee instant', sizeValue: null, sizeUom: null, quantity: null };
+    expect(buildCacheKey({ ...base, headDefaultApplied: false })).toBe(buildCacheKey(base));
+  });
 });

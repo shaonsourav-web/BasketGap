@@ -1,7 +1,7 @@
 import { buildCacheKey, hashCleanedInput } from './steps/09-cache.ts';
 import { cleanLine } from './steps/01-clean.ts';
 import { spellCorrect } from './steps/02-spell-correct.ts';
-import { expandShorthand } from './steps/03-shorthand.ts';
+import { expandShorthandDetailed } from './steps/03-shorthand.ts';
 import { extractQuantitySize } from './steps/04-quantity-size.ts';
 import { extractBrand } from './lib/brand.ts';
 import { directLookup } from './steps/05-direct-lookup.ts';
@@ -24,7 +24,14 @@ export async function matchLine(raw: string, ctx: PipelineContext): Promise<Matc
 
   const cleaned = stepAudit(audit, 'clean', () => cleanLine(raw));
   const corrected = stepAudit(audit, 'spell-correct', () => spellCorrect(cleaned));
-  const expanded = stepAudit(audit, 'shorthand', () => expandShorthand(corrected));
+  const shorthand = stepAudit(
+    audit,
+    'shorthand',
+    () => expandShorthandDetailed(corrected),
+    (out) => (out.headDefaultApplied ? `head-default: ${out.headDefaultNote}` : ''),
+  );
+  const expanded = shorthand.expanded;
+  const headDefaultApplied = shorthand.headDefaultApplied;
   const qty = stepAudit(audit, 'quantity-size', () => extractQuantitySize(expanded));
   const cleanedForMatch = qty.residual || expanded;
   const cleanedInputHash = hashCleanedInput(
@@ -33,6 +40,7 @@ export async function matchLine(raw: string, ctx: PipelineContext): Promise<Matc
       sizeValue: qty.sizeValue,
       sizeUom: qty.sizeUom,
       quantity: qty.quantity,
+      headDefaultApplied,
     }),
   );
 
@@ -100,7 +108,21 @@ export async function matchLine(raw: string, ctx: PipelineContext): Promise<Matc
     }
   }
 
-  const band = bandFor(top?.finalScore ?? 0);
+  // A bare generic head ("coffee", "rice", "milk 1 L") was resolved to the
+  // catalogue's default variant, so the product identity is the engine's
+  // assumption rather than the shopper's words. Such a line may never present
+  // as `matched`; it is held at `assumed` so the UI can flag it for review.
+  // The score itself is left truthful — only the band is capped — and the cap
+  // is recorded in the audit trail.
+  let band = bandFor(top?.finalScore ?? 0);
+  if (headDefaultApplied && band === 'matched') {
+    band = 'assumed';
+    audit.push({
+      step: 'head-default-band-cap',
+      durationMs: 0,
+      notes: `capped matched → assumed (score ${(top?.finalScore ?? 0).toFixed(3)})`,
+    });
+  }
   const result = finalise({
     raw,
     cleaned: cleanedForMatch,
@@ -132,10 +154,19 @@ export async function matchBasket(lines: string[], ctx: PipelineContext): Promis
   return results;
 }
 
-function stepAudit<T>(audit: MatchAuditEntry[], step: string, fn: () => T): T {
+function stepAudit<T>(
+  audit: MatchAuditEntry[],
+  step: string,
+  fn: () => T,
+  notesFor?: (out: T) => string,
+): T {
   const t0 = performance.now();
   const out = fn();
-  audit.push({ step, durationMs: Math.round(performance.now() - t0), notes: '' });
+  audit.push({
+    step,
+    durationMs: Math.round(performance.now() - t0),
+    notes: notesFor ? notesFor(out) : '',
+  });
   return out;
 }
 

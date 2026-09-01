@@ -14,12 +14,32 @@ function isSizeToken(token: string): boolean {
   return SIZE_TOKENS.has(token.toLowerCase());
 }
 
+export interface ShorthandExpansion {
+  /** The expanded line, exactly what {@link expandShorthand} returns. */
+  expanded: string;
+  /**
+   * True when the line was resolved by {@link HEAD_DEFAULTS} — i.e. the user
+   * gave nothing but a bare generic head ("coffee", "rice", "milk 1 L") and
+   * the engine chose a default variant on their behalf. The pipeline uses this
+   * to cap the confidence band at `assumed`: the product identity here is the
+   * catalogue's guess, not the shopper's words.
+   */
+  headDefaultApplied: boolean;
+  /** `"coffee → coffee instant"`, for the audit trail. Empty when none fired. */
+  headDefaultNote: string;
+}
+
+/** Convenience wrapper for callers that only need the expanded text. */
+export function expandShorthand(cleaned: string): string {
+  return expandShorthandDetailed(cleaned).expanded;
+}
+
 // Single pass by design: a second pass re-expands tokens inside completed
 // expansions ("laundry detergent powder" → "laundry dishwashing liquid
 // powder"). Phrases whose expansion would only become visible after another
 // pass get their own direct keys instead ("salted crisps").
-export function expandShorthand(cleaned: string): string {
-  if (!cleaned) return cleaned;
+export function expandShorthandDetailed(cleaned: string): ShorthandExpansion {
+  if (!cleaned) return { expanded: cleaned, headDefaultApplied: false, headDefaultNote: '' };
   const tokens = cleaned.split(' ');
   const result: string[] = [];
   let i = 0;
@@ -47,7 +67,12 @@ export function expandShorthand(cleaned: string): string {
     }
     i += consumed;
   }
-  return applyHeadDefault(result).join(' ');
+  const head = applyHeadDefault(result);
+  return {
+    expanded: head.tokens.join(' '),
+    headDefaultApplied: head.note !== '',
+    headDefaultNote: head.note,
+  };
 }
 
 /**
@@ -57,15 +82,20 @@ export function expandShorthand(cleaned: string): string {
  * "skim milk" pass through untouched, and a line the catalogue cannot serve
  * ("snacks", "toothpaste") never acquires a default it did not ask for.
  */
-function applyHeadDefault(tokens: string[]): string[] {
+function applyHeadDefault(tokens: string[]): { tokens: string[]; note: string } {
   let start = 0;
   while (start < tokens.length && isSizeToken(tokens[start]!)) start++;
   let end = tokens.length;
   while (end > start && isSizeToken(tokens[end - 1]!)) end--;
-  if (end === start) return tokens;
-  const hit = HEAD_DEFAULTS[tokens.slice(start, end).join(' ').toLowerCase()];
-  if (!hit) return tokens;
-  return [...tokens.slice(0, start), ...hit.split(' '), ...tokens.slice(end)];
+  if (end === start) return { tokens, note: '' };
+  const head = tokens.slice(start, end).join(' ').toLowerCase();
+  const hit = HEAD_DEFAULTS[head];
+  // A key that maps to itself adds no assumption, so it is not reported.
+  if (!hit || hit === head) return { tokens, note: '' };
+  return {
+    tokens: [...tokens.slice(0, start), ...hit.split(' '), ...tokens.slice(end)],
+    note: `${head} → ${hit}`,
+  };
 }
 
 /**
