@@ -141,6 +141,147 @@ describe('rankCandidates', () => {
     expect(BAND_THRESHOLDS.matched).toBeGreaterThan(BAND_THRESHOLDS.assumed);
   });
 
+  // QC 2026-09-02 F4. A size the shopper stated and the candidate contradicts
+  // used to score the same 0 as "no size given", so the name floor still
+  // priced "coke 1.25 L" as a 2 L bottle at `matched`.
+  it('holds a contradicted size below the matched band', () => {
+    const ranked = rankCandidates({
+      cleaned: 'coca cola',
+      brand: null,
+      sizeValue: 1.25,
+      sizeUom: 'L',
+      directCandidates: [
+        row({ id: 'a', name: 'Coca Cola', unitSizeValue: 2, unitSizeUom: 'L', textSimilarity: 1 }),
+      ],
+      vectorCandidates: [],
+    });
+    expect(ranked[0]!.finalScore).toBeLessThan(BAND_THRESHOLDS.matched);
+    expect(ranked[0]!.finalScore).toBeGreaterThanOrEqual(BAND_THRESHOLDS.assumed);
+  });
+
+  it('still rewards a genuine size hit as matched', () => {
+    const ranked = rankCandidates({
+      cleaned: 'coca cola',
+      brand: null,
+      sizeValue: 2,
+      sizeUom: 'L',
+      directCandidates: [
+        row({ id: 'a', name: 'Coca Cola', unitSizeValue: 2, unitSizeUom: 'L', textSimilarity: 1 }),
+      ],
+      vectorCandidates: [],
+    });
+    expect(ranked[0]!.finalScore).toBeGreaterThanOrEqual(BAND_THRESHOLDS.matched);
+  });
+
+  // F2: the quantity was extracted and then dropped, so 12ea and 18ea tied at
+  // 0.820 and the winner was whichever row the database returned first.
+  it('uses a stated pack count to break an otherwise exact tie', () => {
+    const input = {
+      cleaned: 'free range eggs',
+      brand: null,
+      sizeValue: null,
+      sizeUom: null,
+      quantity: 18,
+      vectorCandidates: [],
+    };
+    const twelve = row({
+      id: 'a',
+      name: 'Free Range Eggs',
+      unitSizeValue: 12,
+      unitSizeUom: 'ea',
+      textSimilarity: 1,
+    });
+    const eighteen = row({
+      id: 'b',
+      name: 'Free Range Eggs',
+      unitSizeValue: 18,
+      unitSizeUom: 'ea',
+      textSimilarity: 1,
+    });
+    expect(
+      rankCandidates({ ...input, directCandidates: [twelve, eighteen] })[0]!.unitSizeValue,
+    ).toBe(18);
+    expect(
+      rankCandidates({ ...input, directCandidates: [eighteen, twelve] })[0]!.unitSizeValue,
+    ).toBe(18);
+  });
+
+  it('orders equal scores deterministically by name then id', () => {
+    const a = row({ id: 'zzz', name: 'Alpha Milk', textSimilarity: 1 });
+    const b = row({ id: 'aaa', name: 'Beta Milk', textSimilarity: 1 });
+    const input = {
+      cleaned: 'milk',
+      brand: null,
+      sizeValue: null,
+      sizeUom: null,
+      vectorCandidates: [],
+    };
+    const forward = rankCandidates({ ...input, directCandidates: [a, b] });
+    const reversed = rankCandidates({ ...input, directCandidates: [b, a] });
+    expect(forward[0]!.finalScore).toBe(forward[1]!.finalScore);
+    expect(forward.map((c) => c.canonicalProductId)).toEqual(
+      reversed.map((c) => c.canonicalProductId),
+    );
+    expect(forward[0]!.name).toBe('Alpha Milk');
+  });
+
+  // Dosage form and qualifier negation are product identity, not packaging:
+  // dishwasher powder is not dishwasher tablets (stress set 2026-09-02).
+  it.each([
+    ['dishwasher powder', 'Dishwasher Tablets'],
+    ['laundry detergent liquid', 'Laundry Detergent Powder'],
+    ['sweetened almond milk', 'Almond Milk Unsweetened'],
+    ['salted butter', 'Unsalted Butter'],
+  ])('defers rather than selling %j as %j', (cleaned, name) => {
+    const ranked = rankCandidates({
+      cleaned,
+      brand: null,
+      sizeValue: null,
+      sizeUom: null,
+      directCandidates: [row({ id: 'a', name, textSimilarity: 0.95 })],
+      vectorCandidates: [],
+    });
+    expect(ranked[0]!.finalScore).toBeLessThan(BAND_THRESHOLDS.assumed);
+  });
+
+  it('does not read agreement as negation', () => {
+    const ranked = rankCandidates({
+      cleaned: 'unsalted butter',
+      brand: null,
+      sizeValue: null,
+      sizeUom: null,
+      directCandidates: [row({ id: 'a', name: 'Unsalted Butter', textSimilarity: 0.95 })],
+      vectorCandidates: [],
+    });
+    expect(ranked[0]!.finalScore).toBeGreaterThanOrEqual(BAND_THRESHOLDS.matched);
+  });
+
+  // A line that already contains every word of a name must not be diluted into
+  // silence by one trailing packaging or marketing noun.
+  it('tolerates a packaging noun beside a complete name', () => {
+    const ranked = rankCandidates({
+      cleaned: 'coca cola bottle',
+      brand: null,
+      sizeValue: null,
+      sizeUom: null,
+      directCandidates: [row({ id: 'a', name: 'Coca Cola', textSimilarity: 0.62 })],
+      vectorCandidates: [],
+    });
+    expect(ranked[0]!.finalScore).toBeGreaterThanOrEqual(BAND_THRESHOLDS.matched);
+  });
+
+  it('does not tolerate an extra word that carries identity', () => {
+    const ranked = rankCandidates({
+      cleaned: 'diet coca cola',
+      brand: null,
+      sizeValue: null,
+      sizeUom: null,
+      directCandidates: [row({ id: 'a', name: 'Coca Cola', textSimilarity: 0.62 })],
+      vectorCandidates: [],
+    });
+    expect(ranked[0]!.finalScore).toBeLessThan(BAND_THRESHOLDS.matched);
+  });
+
   it('returns empty when no candidates', () => {
     const ranked = rankCandidates({
       cleaned: 'unknown thing',

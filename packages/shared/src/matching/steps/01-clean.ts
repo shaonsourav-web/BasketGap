@@ -24,8 +24,12 @@ const RETAILER_NOISE = /\b(coles|woolworths|woolies|woolys|aldi|iga|costco)\b/g;
 // NOT listed (they change which product is meant, so deleting them forges
 // confidence): raw (raw vs White Sugar), plain (Plain Flour), grated/shredded
 // (grated cheese ≠ a specific block). QC 2026-09-01 F2.
+// QC 2026-09-02 F8: "punnet" and "button" both violated the contract above.
+// "Punnet" appears in canonical names (Strawberries Punnet, Blueberries
+// Punnet), and deleting "button" made the "button mushrooms" shorthand key
+// unreachable — clean removed the word before step 03 could ever see it.
 const DESCRIPTOR_NOISE =
-  /\b(fresh|boneless|seedless|spreadable|squeezy|button|hass|loose|continental|tub|jar|packet|sleeve|bunch|bulb|punnet|for|the|some|my|a|an|of|big|small|hot|pouring|brand)\b/g;
+  /\b(fresh|boneless|seedless|spreadable|squeezy|hass|loose|continental|tub|jar|packet|sleeve|bunch|bulb|for|the|some|my|a|an|of|big|small|hot|pouring|brand)\b/g;
 const CONTAINER_OF =
   /\b(bag|bags|box|boxes|tin|can|jar|bottle|punnet|head|pack|packs|loaf|loaves)s? of\b/g;
 

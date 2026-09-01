@@ -1,4 +1,4 @@
-import { HEAD_DEFAULTS, SHORTHAND } from '../dictionaries/shorthand.ts';
+import { AMBIGUOUS_SHORTHAND, HEAD_DEFAULTS, SHORTHAND } from '../dictionaries/shorthand.ts';
 
 const MAX_NGRAM = 3;
 
@@ -7,7 +7,10 @@ const MAX_NGRAM = 3;
  * are ignored when testing a line against {@link HEAD_DEFAULTS} (and left in
  * place afterwards, so step 04 can still extract them).
  */
-const SIZE_TOKENS = new Set(['l', 'ml', 'kg', 'g', 'ea', 'pack', 'dozen']);
+// QC 2026-09-02 F6: a bare "x" (and the pack abbreviations clean() does not
+// always normalise) stopped the trim, so "3 x 1L milk" never reached the
+// "milk" head default and deferred.
+const SIZE_TOKENS = new Set(['l', 'ml', 'kg', 'g', 'ea', 'pack', 'dozen', 'x', 'pk', 'pkt']);
 
 function isSizeToken(token: string): boolean {
   if (/^(x?\d+(\.\d+)?|\d+(\.\d+)?x)$/.test(token)) return true;
@@ -18,11 +21,12 @@ export interface ShorthandExpansion {
   /** The expanded line, exactly what {@link expandShorthand} returns. */
   expanded: string;
   /**
-   * True when the line was resolved by {@link HEAD_DEFAULTS} — i.e. the user
-   * gave nothing but a bare generic head ("coffee", "rice", "milk 1 L") and
-   * the engine chose a default variant on their behalf. The pipeline uses this
-   * to cap the confidence band at `assumed`: the product identity here is the
-   * catalogue's guess, not the shopper's words.
+   * True when the engine — not the shopper — chose the product identity:
+   * either {@link HEAD_DEFAULTS} resolved a bare generic head ("coffee",
+   * "rice", "milk 1 L") to a default variant, or an
+   * {@link AMBIGUOUS_SHORTHAND} key ("detergent", "mince") was expanded to one
+   * of several plausible products. The pipeline uses this to cap the
+   * confidence band at `assumed`.
    */
   headDefaultApplied: boolean;
   /** `"coffee → coffee instant"`, for the audit trail. Empty when none fired. */
@@ -42,6 +46,7 @@ export function expandShorthandDetailed(cleaned: string): ShorthandExpansion {
   if (!cleaned) return { expanded: cleaned, headDefaultApplied: false, headDefaultNote: '' };
   const tokens = cleaned.split(' ');
   const result: string[] = [];
+  const guesses: string[] = [];
   let i = 0;
   while (i < tokens.length) {
     let consumed = 0;
@@ -50,6 +55,7 @@ export function expandShorthandDetailed(cleaned: string): ShorthandExpansion {
       const hit = SHORTHAND[phrase];
       if (hit) {
         pushExpansion(result, hit);
+        if (AMBIGUOUS_SHORTHAND.has(phrase)) guesses.push(`${phrase} → ${hit}`);
         consumed = n + expansionOverlap(hit, tokens, i + n);
         break;
       }
@@ -59,6 +65,7 @@ export function expandShorthandDetailed(cleaned: string): ShorthandExpansion {
       const hit = SHORTHAND[unigram];
       if (hit) {
         pushExpansion(result, hit);
+        if (AMBIGUOUS_SHORTHAND.has(unigram)) guesses.push(`${unigram} → ${hit}`);
         consumed = 1 + expansionOverlap(hit, tokens, i + 1);
       } else {
         result.push(unigram);
@@ -67,12 +74,31 @@ export function expandShorthandDetailed(cleaned: string): ShorthandExpansion {
     }
     i += consumed;
   }
-  const head = applyHeadDefault(result);
+  const head = applyHeadDefault(squashRepeats(result));
+  const note = [head.note, ...guesses].filter(Boolean).join('; ');
   return {
     expanded: head.tokens.join(' '),
-    headDefaultApplied: head.note !== '',
-    headDefaultNote: head.note,
+    headDefaultApplied: note !== '',
+    headDefaultNote: note,
   };
+}
+
+/**
+ * Drop a repeated token, keeping the first. Two expansions meeting head to
+ * tail emit the same word twice ("brown bread" → "wholemeal bread", then the
+ * shopper's own "wholemeal"), and no canonical name repeats a word — so a
+ * repeat is pure similarity noise, and leaving it in was enough to sink
+ * "brown bread wholemeal 700g" into silence.
+ */
+function squashRepeats(tokens: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const token of tokens) {
+    if (seen.has(token)) continue;
+    seen.add(token);
+    out.push(token);
+  }
+  return out;
 }
 
 /**

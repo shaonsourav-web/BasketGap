@@ -91,4 +91,11 @@ export const TYPOS: Record<string, string> = {
   strawbs: 'strawberries',
   avo: 'avocado',
   avos: 'avocado',
+  // Vowel-dropped heads. Below MIN_CORRECTABLE_LENGTH, so the fuzzy pass can
+  // never reach them — they only work as exact entries. (QC 2026-09-02.)
+  skm: 'skim',
+  flim: 'film',
+  frzn: 'frozen',
+  wholemeel: 'wholemeal',
+  wholmeal: 'wholemeal',
 };

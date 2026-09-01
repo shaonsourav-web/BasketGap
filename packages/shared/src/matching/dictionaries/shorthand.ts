@@ -102,6 +102,7 @@ export const SHORTHAND: Record<string, string> = {
   rocket: 'rocket lettuce',
   zucchinis: 'zucchini',
   'cherry toms': 'cherry tomatoes',
+  'cherry tomato': 'cherry tomatoes',
 
   // ----------------------------------------------------------------- meat
   snags: 'sausages',
@@ -199,7 +200,10 @@ export const SHORTHAND: Record<string, string> = {
   'laundry powder': 'laundry detergent powder',
   'washing powder': 'laundry detergent powder',
   'dishwasher tabs': 'dishwasher tablets',
-  'dishwasher powder': 'dishwasher tablets',
+  // NB: no `dishwasher powder` key. QC 2026-09-02 stress set: powder and
+  // tablets are different products, and the catalogue carries no dishwasher
+  // powder — expanding one into the other forged a `matched` answer for a line
+  // the catalogue cannot serve. Dosage form is identity, not packaging.
   'bin bags': 'bin liners kitchen',
   'garbage bags': 'bin liners kitchen',
   'rubbish bags': 'bin liners kitchen',
@@ -322,6 +326,14 @@ export const SHORTHAND: Record<string, string> = {
   margarita: 'margherita',
   // snacks & drinks
   'salted chips': 'potato chips salted',
+  // Expansion is single-pass, so "chippies salted" would stop at "chips
+  // salted" and never reach the `salted chips` key — it needs its own entry.
+  'chippies salted': 'potato chips salted',
+  chippies: 'chips',
+  'shortcut bacon': 'bacon rashers',
+  'brown bread': 'wholemeal bread',
+  tortilla: 'wraps',
+  tortillas: 'wraps',
   crisps: 'chips',
   's v': 'salt and vinegar',
   'fizzy water': 'sparkling water',
@@ -330,6 +342,34 @@ export const SHORTHAND: Record<string, string> = {
   'washing detergent': 'laundry detergent',
   'tidy bags': 'bin liners kitchen',
 };
+
+/**
+ * SHORTHAND keys whose expansion is an **engine guess**, not a translation:
+ * an unqualified head that could plausibly mean several catalogue products and
+ * has been expanded to exactly one of them. The pipeline treats a line resolved
+ * through one of these exactly as it treats a {@link HEAD_DEFAULTS} hit — the
+ * band is capped at `assumed`, because the product identity is the catalogue's
+ * assumption rather than the shopper's words.
+ *
+ * QC 2026-09-02 F3: "detergent" → Dishwashing Liquid and "mince" → Beef Mince
+ * were reaching `matched` while the identical guess "cheddar" → Tasty Cheese
+ * (→ Block, via HEAD_DEFAULTS) was capped. Same kind of guess, same cap.
+ *
+ * Unambiguous expansions do NOT belong here: "ketchup" → tomato sauce and
+ * "philly" → cream cheese name one product each and stay `matched`.
+ */
+export const AMBIGUOUS_SHORTHAND: ReadonlySet<string> = new Set([
+  // could be dishwashing, laundry or dishwasher detergent
+  'detergent',
+  'washing detergent',
+  // could be beef, lamb, pork, chicken or turkey mince
+  'mince',
+  // could be olive, canola or vegetable oil
+  'cooking oil',
+  // could be soft drink, sparkling water or cordial
+  'fizzy',
+  'softie',
+]);
 
 /**
  * Bare heads → the catalogue's default variant for that head.

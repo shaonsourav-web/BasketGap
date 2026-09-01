@@ -22,6 +22,9 @@ const PROTECTED_WORDS = new Set([
   'plain',
   'clean',
   'pears',
+  // QC 2026-09-02 F5: the singular half was missing, so "pear" → "peas" →
+  // Frozen Peas. Any protected word's other number must be protected too.
+  'pear',
   'whole',
   'fresh',
   'small',
@@ -29,7 +32,48 @@ const PROTECTED_WORDS = new Set([
   'litter',
   // one substitution from the shorthand key "parmy" → Parmesan Cheese
   'party',
+  // QC 2026-09-02 F1: drinking straws are not strawberries.
+  'straw',
+  'straws',
+  // one substitution from "cola" (Coca Cola) / "caps" (capsicum shorthand)
+  'cold',
+  'cats',
+  'cups',
+  // one substitution from a canonical word: "slices", "beef", "black"
+  'spices',
+  'beer',
+  'bleach',
+  'pepper',
+  'babies',
+  'pastry',
+  // one substitution from "bags" (English Breakfast Tea Bags)
+  'bar',
+  'bars',
 ]);
+
+/**
+ * A missing space is a different defect from a typo: "oatmilk" is not one edit
+ * from anything, it is two known words run together. Split it only when the
+ * decomposition is unambiguous — a single split point yielding two words the
+ * catalogue already knows — so nothing is invented.
+ */
+const MIN_COMPOUND_LENGTH = 6;
+const MIN_COMPOUND_PART = 3;
+
+export function splitCompound(token: string, vocabulary: Vocabulary): string | null {
+  if (token.length < MIN_COMPOUND_LENGTH) return null;
+  if (!WORD_LIKE.test(token)) return null;
+  if (vocabulary.words.has(token)) return null;
+  let found: string | null = null;
+  for (let i = MIN_COMPOUND_PART; i <= token.length - MIN_COMPOUND_PART; i++) {
+    const left = token.slice(0, i);
+    const right = token.slice(i);
+    if (!vocabulary.words.has(left) || !vocabulary.words.has(right)) continue;
+    if (found) return null; // more than one legal split — ambiguous, leave it
+    found = `${left} ${right}`;
+  }
+  return found;
+}
 
 /**
  * Spell correction, two passes:
@@ -57,6 +101,8 @@ export function spellCorrect(cleaned: string, vocabulary: Vocabulary = SEED_VOCA
       const lookup = token.toLowerCase();
       const exact = TYPOS[lookup];
       if (exact) return exact;
+      const split = splitCompound(lookup, vocabulary);
+      if (split) return split;
       return fuzzyCorrect(lookup, vocabulary) ?? token;
     })
     .join(' ');
@@ -102,6 +148,14 @@ export function fuzzyCorrect(
         continue;
       const distance = editDistance(token, candidate, budget);
       if (distance > budget) continue;
+      // QC 2026-09-02 F1: a two-edit budget is wide enough to rewrite real
+      // English words into catalogue words that merely rhyme with them
+      // ("pepper" → "paper"). Two edits are only allowed to a word that keeps
+      // the token's first two characters, or that is an adjacent transposition
+      // of it — the shapes an actual fat-finger typo takes ("mlik" → "milk").
+      if (distance === 2 && candidate[1] !== token[1] && !isTransposition(token, candidate)) {
+        continue;
+      }
       if (distance < bestDistance) {
         bestDistance = distance;
         best = candidate;
@@ -113,4 +167,17 @@ export function fuzzyCorrect(
   }
 
   return ambiguous ? null : best;
+}
+
+/** True when the two equal-length words differ only by one swap of neighbours. */
+function isTransposition(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let i = 0;
+  while (i < a.length && a[i] === b[i]) i++;
+  if (i >= a.length - 1) return false;
+  if (a[i] !== b[i + 1] || a[i + 1] !== b[i]) return false;
+  for (let j = i + 2; j < a.length; j++) {
+    if (a[j] !== b[j]) return false;
+  }
+  return true;
 }

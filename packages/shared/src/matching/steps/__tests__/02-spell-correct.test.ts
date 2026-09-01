@@ -59,6 +59,55 @@ describe('spellCorrect — fuzzy fallback against the catalogue vocabulary', () 
   });
 });
 
+// QC 2026-09-02 F1/F7: the corrector used to be allowed to rewrite a token
+// into ANY vocabulary word, including shorthand slang keys, so "straws" became
+// "strawbs" → Strawberries Punnet at `matched`. Correction targets are now
+// canonical names, brands and typo-table values only.
+describe('spellCorrect — never invents a product from a real English word', () => {
+  it.each([
+    ['straws', 'straws'],
+    ['plastic straws', 'plastic straws'],
+    ['pepper', 'pepper'],
+    ['beer', 'beer'],
+    ['spices', 'spices'],
+    ['bleach', 'bleach'],
+    ['cold', 'cold'],
+    ['cats', 'cats'],
+    ['babies', 'babies'],
+    ['pastry', 'pastry'],
+    ['cups', 'cups'],
+    ['muesli bars', 'muesli bars'],
+    // F5: the singular half of a protected plural was missing, so "pear"
+    // became "peas" → Frozen Peas.
+    ['pear', 'pear'],
+  ])('leaves %j alone', (input, expected) => {
+    expect(spellCorrect(input)).toBe(expected);
+  });
+});
+
+describe('spellCorrect — missing-space compounds', () => {
+  it.each([
+    ['oatmilk', 'oat milk'],
+    ['soymilk', 'soy milk'],
+    ['bakedbeans', 'baked beans'],
+    // Only an unambiguous single split of two KNOWN words is taken.
+    ['xyzzyfoo', 'xyzzyfoo'],
+    ['milk', 'milk'],
+  ])('splits %j → %j', (input, expected) => {
+    expect(spellCorrect(input)).toBe(expected);
+  });
+});
+
+describe('spellCorrect — two-edit corrections stay typo-shaped', () => {
+  it.each([
+    // Adjacent transpositions are the classic fat-finger typo and survive.
+    ['mlik', 'milk'],
+    ['otas', 'oats'],
+  ])('corrects %j → %j', (input, expected) => {
+    expect(spellCorrect(input)).toBe(expected);
+  });
+});
+
 describe('fuzzyCorrect — guards', () => {
   const vocabulary = buildVocabulary(['milk', 'bake', 'cake', 'cheese', 'lentils']);
 

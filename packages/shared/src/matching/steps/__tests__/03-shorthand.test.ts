@@ -143,6 +143,62 @@ describe('head-default reporting', () => {
   });
 });
 
+// QC 2026-09-02 F3: "detergent" → Dishwashing Liquid and "mince" → Beef Mince
+// are the same kind of engine guess as a HEAD_DEFAULTS hit — one of several
+// plausible products chosen on the shopper's behalf — and must be reported the
+// same way so the pipeline caps them at `assumed`.
+describe('ambiguous shorthand is reported as an engine assumption', () => {
+  it.each([
+    ['detergent', 'dishwashing liquid'],
+    ['mince', 'beef mince'],
+    ['mince 500 g', 'beef mince 500 g'],
+    ['cooking oil', 'vegetable oil'],
+  ])('flags %j', (input, expanded) => {
+    const out = expandShorthandDetailed(input);
+    expect(out.expanded).toBe(expanded);
+    expect(out.headDefaultApplied).toBe(true);
+    expect(out.headDefaultNote).toContain('→');
+  });
+
+  it.each([
+    // Unambiguous expansions name exactly one product and stay unflagged.
+    ['ketchup', 'tomato sauce bottle'],
+    ['philly', 'cream cheese'],
+    ['lean mince', 'beef mince lean'],
+    ['lamb mince', 'lamb mince'],
+  ])('does not flag %j', (input, expanded) => {
+    const out = expandShorthandDetailed(input);
+    expect(out.expanded).toBe(expanded);
+    expect(out.headDefaultApplied).toBe(false);
+  });
+});
+
+describe('QC 2026-09-02 expansion fixes', () => {
+  // F6: `x` stopped the size-token trim, so the head default never fired.
+  it.each([
+    ['3 x 1 L milk', '3 x 1 L full cream milk'],
+    ['2 x bread', '2 x white sandwich bread loaf'],
+  ])('sees past pack multipliers: %j → %j', (input, expected) => {
+    expect(expandShorthand(input)).toBe(expected);
+  });
+
+  // Two expansions meeting head to tail used to emit a word twice, which was
+  // enough similarity noise to sink the line.
+  it.each([
+    ['brown bread wholemeal', 'wholemeal bread loaf'],
+    ['wraps tortilla', 'wraps'],
+    ['chippies salted', 'potato chips salted'],
+    ['shortcut bacon', 'bacon rashers'],
+  ])('emits no repeated token: %j → %j', (input, expected) => {
+    expect(expandShorthand(input)).toBe(expected);
+  });
+
+  // F8: `button` was deleted by cleanLine, so this key could never fire.
+  it('reaches the button mushrooms key', () => {
+    expect(expandShorthand('button mushrooms')).toBe('mushrooms');
+  });
+});
+
 describe('dictionary grounding', () => {
   const catalogueText = CANONICAL_SEED.map((e) => e.name.toLowerCase());
 

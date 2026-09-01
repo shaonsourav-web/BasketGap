@@ -22,4 +22,15 @@ describe('cleanLine', () => {
   ])('cleans %j → %j', (input, expected) => {
     expect(cleanLine(input)).toBe(expected);
   });
+
+  // QC 2026-09-02 F8. "Punnet" is part of two canonical names, and deleting
+  // "button" made the `button mushrooms` shorthand key unreachable — both
+  // broke the DESCRIPTOR_NOISE contract that only words appearing in no
+  // canonical name (and changing no product identity) may be stripped.
+  it.each([
+    ['strawberries punnet', 'strawberries punnet'],
+    ['button mushrooms', 'button mushrooms'],
+  ])('keeps identity-bearing words: %j → %j', (input, expected) => {
+    expect(cleanLine(input)).toBe(expected);
+  });
 });

@@ -87,6 +87,7 @@ export async function matchLine(raw: string, ctx: PipelineContext): Promise<Matc
       brand,
       sizeValue: qty.sizeValue,
       sizeUom: qty.sizeUom,
+      quantity: qty.quantity,
       directCandidates: direct,
       vectorCandidates: vector,
     }),
