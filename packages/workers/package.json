@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "ping": "tsx --env-file=../../.env.local src/cli.ts ping",
-    "ingest": "tsx --env-file=../../.env.local src/cli.ts ingest"
+    "ingest": "tsx --env-file=../../.env.local src/cli.ts ingest",
+    "enrich-skus": "tsx --env-file=../../.env.local src/cli.ts enrich-skus",
+    "match": "tsx --env-file=../../.env.local src/cli.ts match"
   },
   "dependencies": {
     "@basketgap/shared": "workspace:*",
