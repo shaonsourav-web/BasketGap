@@ -1,0 +1,50 @@
+{
+  "format": "basketgap-specials",
+  "version": 1,
+  "retailer": "coles",
+  "sourceType": "pdf",
+  "sourceLabel": "synthetic-example-week",
+  "validFrom": "2026-11-04",
+  "validTo": "2026-11-10",
+  "specials": [
+    {
+      "productName": "Sample Wholemeal Bread 700g",
+      "brand": "SampleBake",
+      "regularPrice": 4.5,
+      "specialPrice": 3.0
+    },
+    {
+      "productName": "Demo Cola Soft Drink",
+      "brand": "DemoCo",
+      "sizeText": "2L",
+      "regularPrice": 4.0,
+      "specialPrice": 2.0,
+      "promoType": "half_price",
+      "promoLabel": "1/2 Price"
+    },
+    {
+      "productName": "Test Iced Tea 500ml",
+      "brand": "TestTea",
+      "specialPrice": 5.0,
+      "promoType": "multi_buy",
+      "promoLabel": "2 for $5"
+    },
+    {
+      "productName": "Example Coffee Beans",
+      "brand": "ExampleRoast",
+      "unitSizeValue": 1,
+      "unitSizeUom": "kg",
+      "regularPrice": 30.0,
+      "specialPrice": 21.0,
+      "promoType": "percent_off",
+      "promoLabel": "30% off",
+      "retailerSku": "EXAMPLE-0004"
+    },
+    {
+      "productName": "Mock Free Range Eggs 12 pack",
+      "brand": "MockFarm",
+      "regularPrice": 7.5,
+      "specialPrice": 6.0
+    }
+  ]
+}

@@ -1,54 +1,55 @@
-import { ingestColesPdf } from '../adapters/coles-pdf/index.ts';
-import { ingestColesWeb } from '../adapters/coles-web/index.ts';
-import { ingestWooliesPdf } from '../adapters/woolies-pdf/index.ts';
-import { ingestWooliesWeb } from '../adapters/woolies-web/index.ts';
-import type { IngestOptions, IngestResult } from '../adapters/_shared/types.ts';
+import { PLUGIN_ENV, loadAdapterRegistry, type AdapterRegistry } from '../adapters/registry.ts';
+import type { IngestOptions } from '../adapters/_shared/types.ts';
 import { captureException } from '@basketgap/shared/lib/observability';
 
-const USAGE = `Usage: workers ingest <adapter> [options]
-
-Adapters:
-  coles-pdf      Ingest a Coles weekly PDF catalogue.
-  woolies-pdf    Ingest a Woolworths weekly PDF catalogue.
-  coles-web      Ingest the Coles "Down Down" web specials page.
-  woolies-web    Ingest the Woolworths "Prices Dropped" web specials page.
-
-Options:
-  --source-url <url>     Fetch source from URL (PDF: HTTP, web: headless browser).
-  --fixture <path>       Load source from local fixture file.
+const OPTIONS_USAGE = `Options:
+  --file <path>          Load the source from a local file (alias: --fixture).
+  --source-url <url>     Fetch the source from a URL (only adapters that support it).
   --dry-run              Parse only; skip database writes.
   --force-refresh        Replace existing specials if hash already ingested.
 
-Exactly one of --source-url or --fixture is required.
+Exactly one of --source-url or --file is required.
 `;
 
-const ADAPTERS: Record<string, (options: IngestOptions) => Promise<IngestResult>> = {
-  'coles-pdf': ingestColesPdf,
-  'woolies-pdf': ingestWooliesPdf,
-  'coles-web': ingestColesWeb,
-  'woolies-web': ingestWooliesWeb,
-};
+const NO_PLUGINS = `No ingest plugins are installed (${PLUGIN_ENV} is not set).
+Retailer-specific adapters are not part of this repository; a plugin that
+provides them is loaded from ${PLUGIN_ENV} (comma-separated module paths
+or package names). Without one, the built-in \`import\` adapter loads specials
+from a JSON or CSV file — see docs/ingest-adapters.md.
+`;
 
-export async function runIngest(argv: string[]): Promise<number> {
+export async function runIngest(
+  argv: string[],
+  loadRegistry: () => Promise<AdapterRegistry> = () => loadAdapterRegistry(),
+): Promise<number> {
+  const registry = await loadRegistry();
+  for (const error of registry.errors) process.stderr.write(`ingest: ${error}\n`);
+
   const [adapter, ...rest] = argv;
   if (!adapter || adapter === '-h' || adapter === '--help') {
-    process.stdout.write(USAGE);
+    process.stdout.write(usage(registry));
     return adapter ? 0 : 1;
   }
-  const ingester = ADAPTERS[adapter];
-  if (!ingester) {
-    process.stderr.write(`Unknown adapter: ${adapter}\n${USAGE}`);
+  const registered = registry.adapters.get(adapter);
+  if (!registered) {
+    process.stderr.write(`Unknown adapter: ${adapter}\n`);
+    if (registry.plugins.length === 0) {
+      process.stderr.write(`\n${NO_PLUGINS}`);
+    } else if (registry.errors.length > 0) {
+      process.stderr.write('\nA configured plugin failed to load (see above).\n');
+    }
+    process.stderr.write(`\n${usage(registry, { pluginNote: false })}`);
     return 1;
   }
 
   const options = parseFlags(rest);
   if (!options) {
-    process.stderr.write(USAGE);
+    process.stderr.write(usage(registry));
     return 1;
   }
 
   try {
-    const result = await ingester(options);
+    const result = await registered.adapter.ingest(options);
     const summary = {
       ok: true,
       adapter,
@@ -75,9 +76,26 @@ export async function runIngest(argv: string[]): Promise<number> {
   }
 }
 
-function parseFlags(
-  argv: string[],
-): { sourceUrl?: string; fixturePath?: string; dryRun: boolean; forceRefresh: boolean } | null {
+function usage(
+  registry: AdapterRegistry,
+  options: { pluginNote: boolean } = { pluginNote: true },
+): string {
+  const entries = [...registry.adapters.values()];
+  const width = Math.max(...entries.map(({ adapter }) => adapter.name.length)) + 2;
+  const lines = entries.map(({ adapter, origin }) => {
+    const from = origin === 'built-in' ? '' : ` [plugin: ${origin}]`;
+    return `  ${adapter.name.padEnd(width)} ${adapter.description}${from}`;
+  });
+  const pluginNote = options.pluginNote && registry.plugins.length === 0 ? `\n${NO_PLUGINS}` : '';
+  return `Usage: workers ingest <adapter> [options]
+
+Adapters:
+${lines.join('\n')}
+${pluginNote}
+${OPTIONS_USAGE}`;
+}
+
+function parseFlags(argv: string[]): IngestOptions | null {
   let sourceUrl: string | undefined;
   let fixturePath: string | undefined;
   let dryRun = false;
@@ -89,6 +107,7 @@ function parseFlags(
       case '--source-url':
         sourceUrl = argv[++i];
         break;
+      case '--file':
       case '--fixture':
         fixturePath = argv[++i];
         break;
@@ -105,11 +124,11 @@ function parseFlags(
   }
 
   if (sourceUrl && fixturePath) {
-    process.stderr.write('Pass --source-url or --fixture, not both.\n');
+    process.stderr.write('Pass --source-url or --file, not both.\n');
     return null;
   }
   if (!sourceUrl && !fixturePath) {
-    process.stderr.write('Pass either --source-url or --fixture.\n');
+    process.stderr.write('Pass either --source-url or --file.\n');
     return null;
   }
 

@@ -1,0 +1,6 @@
+retailer,source_type,source_label,valid_from,valid_to,product_name,brand,size_text,regular_price,special_price,promo_type,promo_label,multi_buy,is_member_locked,retailer_sku
+woolworths,web,synthetic-example-week,2026-11-04,2026-11-10,Sample Wholemeal Bread 700g,SampleBake,,4.50,3.00,,,,,
+woolworths,web,synthetic-example-week,2026-11-04,2026-11-10,Demo Cola Soft Drink,DemoCo,2L,$4.00,$2.00,half_price,1/2 Price,,,
+woolworths,web,synthetic-example-week,2026-11-04,2026-11-10,Test Iced Tea 500ml,TestTea,,,5.00,multi_buy,2 for $5,true,,
+woolworths,web,synthetic-example-week,2026-11-04,2026-11-10,"Example Coffee Beans, Dark Roast",ExampleRoast,1kg,30.00,21.00,percent_off,30% off,,,EXAMPLE-0004
+woolworths,web,synthetic-example-week,2026-11-04,2026-11-10,Mock Free Range Eggs 12 pack,MockFarm,,7.50,6.00,,,,,

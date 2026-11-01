@@ -63,3 +63,23 @@ export type IngestResult = {
   reason: string | null;
   parsed: ParsedCatalogue;
 };
+
+/**
+ * One `workers ingest <name>` target. The built-in `import` adapter and every
+ * plugin-supplied adapter implement this same contract.
+ */
+export type IngestAdapter = {
+  /** CLI name: lowercase letters, digits and dashes (e.g. `import`). */
+  name: string;
+  /** One line shown in `workers ingest --help`. */
+  description: string;
+  ingest: (options: IngestOptions) => Promise<IngestResult>;
+};
+
+/**
+ * Shape of a module listed in `BASKETGAP_INGEST_PLUGINS`: a named `adapters`
+ * export, or a default export carrying `adapters`. See docs/ingest-adapters.md.
+ */
+export type IngestPlugin = {
+  adapters: readonly IngestAdapter[];
+};
