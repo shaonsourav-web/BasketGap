@@ -1,0 +1,15 @@
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Generated native projects (managed workflow — regenerate with `expo prebuild`)
+/ios
+/android
+
+# Metro
+.metro-health-check*
+
+# Local simulator screenshots (may show earlier real data; archive privately)
+.shots/

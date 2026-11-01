@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "BasketGap",
+    "slug": "basketgap",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "basketgap",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#F3F6F6",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "au.com.basketgap.app"
+    },
+    "android": {
+      "package": "au.com.basketgap.app",
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "static"
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}
