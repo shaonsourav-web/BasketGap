@@ -80,7 +80,7 @@ Hand over a green API package: `packages/api/` deployed to Vercel production as 
 | `src/lib/env.ts`                   | API-specific env, extends shared `BaseEnvSchema`                                                                                                                                                                                          |
 | `src/lib/hash.ts`                  | Daily-rotated salt sha256 for IPs/device IDs                                                                                                                                                                                              |
 | `src/lib/sentry.ts`                | One-time `Sentry.init` guarded by global flag                                                                                                                                                                                             |
-| `src/__tests__/match.test.ts`      | Endpoint tests with mocked DB/Upstash/Gemini                                                                                                                                                                                              |
+| `src/__tests__/match.test.ts`      | Endpoint tests with mocked DB/Upstash/providers                                                                                                                                                                                           |
 | `src/__tests__/rate-limit.test.ts` | Middleware tests with mocked Upstash                                                                                                                                                                                                      |
 | `src/__tests__/cors.test.ts`       | Allow/deny origin paths                                                                                                                                                                                                                   |
 
@@ -119,7 +119,7 @@ Hand over a green API package: `packages/api/` deployed to Vercel production as 
 
 1. Vercel project `basketgap-api` created in team `team_RL7l6U4gJrlPx1yP9gkfRPAx`.
 2. Repo linked (Vercel git integration; root dir = `packages/api`).
-3. Env vars set in Vercel dashboard: `DATABASE_URL`, `GEMINI_API_KEY`, `GEMINI_LLM_MODEL` (optional), `GEMINI_EMBEDDING_MODEL` (optional), `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `ALLOWED_ORIGINS`, `SENTRY_DSN_API` (optional), `MAX_LLM_CALLS_PER_REQUEST` (optional, defaults to 10).
+3. Env vars set in Vercel dashboard: `DATABASE_URL`, `GEMINI_API_KEY` (embeddings), `GEMINI_EMBEDDING_MODEL` (optional), `OPENAI_API_KEY` (LLM fallback), `OPENAI_LLM_MODEL` (optional), `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `ALLOWED_ORIGINS`, `SENTRY_DSN_API` (optional), `MAX_LLM_CALLS_PER_REQUEST` (optional, defaults to 10).
 4. Upstash Redis instance provisioned via Vercel Marketplace; URL/token populated as Vercel env vars (Marketplace integration does this automatically).
 5. Preview deployment succeeds (`mcp__plugin_vercel_vercel__deploy_to_vercel`).
 6. External `curl https://<preview-url>/api/match -d '{"lines":["milk 2L"]}'` returns 200.

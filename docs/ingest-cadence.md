@@ -1,64 +1,42 @@
 # Ingest cadence
 
-What runs when, what is automated, what the owner has to do by hand, and what
-happens when nothing runs.
+How often catalogue data should be refreshed, how long it stays usable, and
+what happens when a refresh is missed. This page is retailer-agnostic; how a
+given source is fetched or parsed is the job of the adapter that handles it
+(see [ingest-adapters.md](./ingest-adapters.md)).
 
-## Schedule
+## Refresh rhythm
 
-All four ingest workflows run **weekly on Wednesday morning Sydney time**, when
-the new weekly catalogues land. GitHub cron is UTC and does not observe DST, so
-a fixed UTC slot drifts one hour across the year — Sydney is AEST (UTC+10)
-roughly Apr–Oct and AEDT (UTC+11) roughly Oct–Apr. The slots below were picked
-so both ends of that drift stay inside Wednesday morning.
+Retailer specials are published on a weekly cycle, so the target is **one
+ingest per catalogue per week**, run soon after the new week's prices go live.
+Anything more frequent only helps when a source republishes mid-week.
 
-| Workflow             | Cron (UTC)    | AEST (Apr–Oct) | AEDT (Oct–Apr) | Status                                   |
-| -------------------- | ------------- | -------------- | -------------- | ---------------------------------------- |
-| `ingest-coles-pdf`   | `0 20 * * 2`  | Wed 06:00      | Wed 07:00      | Automated, must stay green               |
-| `ingest-woolies-pdf` | `30 20 * * 2` | Wed 06:30      | Wed 07:30      | Automated, must stay green               |
-| `ingest-coles-web`   | `0 21 * * 2`  | Wed 07:00      | Wed 08:00      | Automated but **expected to be blocked** |
-| `ingest-woolies-web` | `30 21 * * 2` | Wed 07:30      | Wed 08:30      | Automated but **expected to be blocked** |
+Ingests are idempotent: they are keyed on the SHA-256 of the source bytes, so
+re-running one against unchanged input is a no-op (pass `--force-refresh` to
+override). That makes it safe to schedule an ingest more often than the source
+changes, and safe to retry after a failure.
 
-Runs are staggered 30 minutes apart so two Playwright/PDF jobs never contend,
-and each workflow has a `concurrency` group so a manual `workflow_dispatch`
-cannot collide with the scheduled run.
+How the weekly run is triggered is up to whoever operates the data pipeline:
+a scheduler of your choice, or a person running the CLI by hand. This
+repository does not ship a retailer ingest schedule. Whatever runs the job
+should:
 
-Every workflow also accepts `workflow_dispatch` with an optional `source_url`
-override and a `force_refresh` toggle. Source URLs come from repo Variables
-(`CATALOGUE_URL_COLES`, `CATALOGUE_URL_WOOLIES`, `CATALOGUE_URL_COLES_WEB`,
-`CATALOGUE_URL_WOOLIES_WEB`); credentials come from the existing `DATABASE_URL`
-and `SENTRY_DSN` secrets. No new secrets were introduced.
+- stagger separate ingests rather than start them all at once;
+- prevent two runs of the same source overlapping (a lock or concurrency
+  group);
+- treat a failed or empty run as a signal to look at, not as the normal
+  outcome (see below).
 
-## Automated vs owner-manual
+## Sources
 
-**Automated — PDF adapters.** The weekly catalogue PDFs are fetched over plain
-HTTP and are not bot-walled. `ingest-coles-pdf` and `ingest-woolies-pdf` are the
-real automation: if either goes red, the week's data did not land and it needs
-fixing.
-
-**Effectively owner-manual — web adapters.** Live testing showed both retailers
-bot-block headless Playwright from datacentre IPs, so a CI run of `coles-web` /
-`woolies-web` almost never sees a product tile. The workflows still run weekly —
-they are the canary that tells us if the wall ever comes down — but they
-classify their own outcome:
-
-- **exit 0 with `itemCount > 0`** → real data, logged `OK`.
-- **exit 0 with `itemCount == 0`**, or a failure whose log matches a block
-  signature (Playwright selector timeout, `net::ERR_*`, HTTP 401/403, "Access
-  Denied", captcha / "Just a moment" / "Pardon Our Interruption") → logged
-  `BLOCKED_OR_EMPTY`, raised as a GitHub **warning annotation**, workflow exits
-  **green**. This is the expected weekly outcome.
-- **anything else** — DB connection refused, missing config, a code or schema
-  error → logged as an error annotation and the workflow **fails red**.
-
-That split is the point: a bot wall is not a regression and must not train us to
-ignore a red X, but a genuine breakage must still be loud.
-
-The supported path for current-week web specials is therefore the owner capture
-runbook: **`packages/workers/scripts/CAPTURE.md`**. Once a week the owner opens
-the specials pages in their own Chrome, extracts tiles to JSON, converts them
-with `packages/workers/scripts/make-fixtures.py`, and ingests via
-`ingest <adapter> --fixture <file>`, then runs `enrich-skus` and a `match`
-spot-check. Roughly 15 minutes, same Wednesday morning slot.
+- **`import` adapter (built in).** Reads a local `.json` or `.csv` file in the
+  documented format, never touches the network, and is the supported way to
+  load data you are entitled to share (for example prices typed up from a
+  printed catalogue). See [ingest-adapters.md](./ingest-adapters.md).
+- **Plugin adapters (optional, external).** Adapters that fetch or parse
+  third-party sources are not part of this repository. They are loaded at
+  runtime through `BASKETGAP_INGEST_PLUGINS`, and their own schedule, access
+  arrangements and failure modes are documented by whoever provides them.
 
 ## Freshness: the 14-day window
 
@@ -72,28 +50,25 @@ Consequences:
 - A special from a catalogue older than 14 days is **excluded**, not shown as
   stale. The app degrades by having fewer offers, never by quoting an expired
   price.
-- Missing one weekly cycle is survivable — the previous week's catalogue is
+- Missing one weekly cycle is survivable: the previous week's catalogue is
   still inside the window.
 - Missing **two** cycles is not: offers from that retailer start dropping out of
   results, and a basket can silently lose its cheapest option.
-- So the hard obligation is: never skip the owner capture two Wednesdays in a
-  row, and treat a red PDF workflow as same-week work.
+- So the hard obligation is: never skip a retailer's refresh two weeks in a row,
+  and treat a failed scheduled ingest as same-week work.
+- Imports without `validFrom`/`validTo` age out two weeks after they land, so
+  dated files are preferable.
 
-## Standing task — woolies-web shadow DOM
+## Checking that data landed
 
-Woolworths renders its specials shelf inside a **shadow DOM**, which the current
-`woolies-web` parser does not pierce. Even with the bot wall solved, scheduled
-`ingest-woolies-web` scraping stays dependent on the shadow-DOM-aware adapter
-that is being rewritten in parallel.
+After an ingest, confirm the catalogue and its specials are present, then spot
+check the matcher against a few real basket lines:
 
-Until that adapter lands:
+```bash
+pnpm --filter @basketgap/workers exec tsx src/cli.ts ingest import --file <file> --dry-run   # parse only
+pnpm --filter @basketgap/workers ingest import --file <file>                                 # write
+pnpm --filter @basketgap/workers exec tsx src/cli.ts enrich-skus --retailer <retailer>
+pnpm --filter @basketgap/workers exec tsx src/cli.ts match --line "<basket line>"
+```
 
-- Treat `ingest-woolies-web`'s green `BLOCKED_OR_EMPTY` runs as expected.
-- Get Woolworths web specials through `CAPTURE.md` only.
-- Do not patch `packages/workers/src/adapters/woolies-web/**` from the capture
-  side — the capture script targets the fixture selectors deliberately, and
-  competing edits to the adapter will collide with the rewrite.
-
-When the rewritten adapter is merged, re-check whether `ingest-woolies-web` can
-produce `itemCount > 0` from CI; if it still cannot, the block is the IP wall,
-not the DOM, and this page's split stands unchanged.
+`ingest` and `match` need `DATABASE_URL`; `--dry-run` does not.

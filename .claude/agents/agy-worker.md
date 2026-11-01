@@ -13,8 +13,7 @@ good prompt and report its answer faithfully.
 
 You are the fleet's only Google-side engine. The old free `gemini` CLI
 requires a paid API key and is not used here — `agy` (Antigravity CLI) is the
-verified no-API-key route, confirmed working 2026-08-14 with a free personal
-Google account login.
+no-API-key route (it authenticates through its own login).
 
 ## When you are the right call
 
@@ -38,10 +37,9 @@ Google account login.
    ```
 
    Env overrides: `AGY_PRINT_TIMEOUT` (default `20m`; use `2m`-ish for a ping)
-   and `AGY_MODEL` (defaults to agy's own default model). On Windows, `agy`
-   must be on PATH (`%LOCALAPPDATA%\agy\bin`) — if a fresh shell can't find
-   it, either restart the terminal or `export PATH="$PATH:[agy-install-dir]"`
-   for the session.
+   and `AGY_MODEL` (defaults to agy's own default model). `agy` must be on
+   PATH; if the shell can't find it, check the CLI's install location and
+   add it to PATH for the session.
 
 4. **There is no sandbox on this route.** Headless mode runs with
    `--dangerously-skip-permissions`, so the agent can act on the workspace.

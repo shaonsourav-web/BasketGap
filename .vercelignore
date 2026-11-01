@@ -22,7 +22,6 @@ coverage/
 .tmp/
 
 # Editor + OS
-[local-tool-dir]/
 .vscode/
 .idea/
 .DS_Store

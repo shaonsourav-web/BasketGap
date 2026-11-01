@@ -31,7 +31,7 @@ All three headline numbers in the change description (99.5% / 97.0% + 0 wrong pi
 | `sleeve of biscuits` | `of biscuits` | needs_attention 0.121                     |
 | `bulb of garlic`     | `of garlic`   | assumed 0.600 (degraded from matched)     |
 
-The same root cause leaves other orphan function words behind: `a bag of potatoes` → `a potatoes` (needs_attention 0.175), `coles brand tin of tomatoes` → `brand tomatoes` (needs_attention 0.158). The controls behave correctly (`jar of vegemite`, `head of broccoli`, `punnet of strawberries` all match, because those words _are_ in `CONTAINER_OF`), which confirms the diagnosis. Fix is cheap: add `bunch|bulb|tub|packet|sleeve` to `CONTAINER_OF`, and strip stray leading/orphan `of|a|the|brand` after both noise passes. Neither eval set covers this phrasing, which is why the gates are green.
+The same root cause leaves other orphan function words behind: `a bag of potatoes` → `a potatoes` (needs*attention 0.175), `coles brand tin of tomatoes` → `brand tomatoes` (needs_attention 0.158). The controls behave correctly (`jar of vegemite`, `head of broccoli`, `punnet of strawberries` all match, because those words \_are* in `CONTAINER_OF`), which confirms the diagnosis. Fix is cheap: add `bunch|bulb|tub|packet|sleeve` to `CONTAINER_OF`, and strip stray leading/orphan `of|a|the|brand` after both noise passes. Neither eval set covers this phrasing, which is why the gates are green.
 
 ### F2 — MEDIUM (must fix): `DESCRIPTOR_NOISE` deletes meaning-bearing words, producing new wrong picks at `matched` confidence
 

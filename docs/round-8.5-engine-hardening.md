@@ -138,16 +138,16 @@ Strict order (each depends on the prior):
 
 1. `workers seed-canonical` — requires `GEMINI_API_KEY`; embeds + upserts the 152 staples. **Gating first step** (vector search has nothing to match without it).
 2. `workers ingest <adapter>` × 4 (coles-pdf, woolies-pdf, coles-web, woolies-web) against live sources — populates `catalogues` + `specials` with real prices.
-3. `workers enrich-skus` — links `specials.retailer_sku` → canonical (needs `GEMINI_API_KEY`); also the bootstrap source for Part C.
+3. `workers enrich-skus` — links `specials.retailer_sku` → canonical (needs `GEMINI_API_KEY` for vector search; `OPENAI_API_KEY` optionally enables the LLM fallback); also the bootstrap source for Part C.
 4. Re-embed any newly derived canonical rows; re-tune ivfflat.
 
-- **Runtime cost note:** `/match` embeds **every uncached line at query time** → `GEMINI_API_KEY` is a _runtime_ dependency of the API, not just seed-time. Embedding cost is negligible (<1¢ per full catalogue; per-request scales with traffic). Dominant variable cost is the Gemini LLM fallback (already capped via `withLlmCap`).
+- **Runtime cost note:** `/match` embeds **every uncached line at query time** → `GEMINI_API_KEY` is a _runtime_ dependency of the API, not just seed-time. Embedding cost is negligible (<1¢ per full catalogue; per-request scales with traffic). Dominant variable cost is the LLM fallback — OpenAI `gpt-6-luna` since 2026-11-01, previously Gemini (already capped via `withLlmCap`).
 
 ## Part E — Production deploy (Round 8 gates 4–6, after A–D)
 
 - Create Vercel project `basketgap-api` (team `team_RL7l6U4gJrlPx1yP9gkfRPAx`), root dir `packages/api`, region `syd1`; add explicit `"framework": null` to `vercel.json`.
 - Provision Upstash Redis via Vercel Marketplace (auto-populates `UPSTASH_*`).
-- Set env vars — **API (Vercel):** `DATABASE_URL` (**Supabase pooled / port 6543**), `GEMINI_API_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `ALLOWED_ORIGINS`, optional `SENTRY_DSN_API`, `MAX_LLM_CALLS_PER_REQUEST`.
+- Set env vars — **API (Vercel):** `DATABASE_URL` (**Supabase pooled / port 6543**), `GEMINI_API_KEY`, `OPENAI_API_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `ALLOWED_ORIGINS`, optional `SENTRY_DSN_API`, `MAX_LLM_CALLS_PER_REQUEST`.
 - Preview deploy → external curl `/api/match` → production deploy → `gh run watch` CI green.
 - Verify `.vercelignore` against real build output (`.vercel/output/` must not contain `.env*`, `docs/`, `memory/`, `.dbpass`, `*.sql`, `packages/workers/`).
 
@@ -156,7 +156,7 @@ Strict order (each depends on the prior):
 - [ ] Engine fixes A1–A5 merged + eval harness (Part B) green
 - [ ] Catalogue bootstrapped (Part C) — real breadth, not 152 staples
 - [ ] Data pipeline run (Part D) — seed → ingest → enrich, `/match` returns real prices
-- [ ] **GitHub repo secrets** set for ingest crons: `DATABASE_URL`, `SENTRY_DSN` (and add `GEMINI_API_KEY` + an `enrich-skus` scheduled workflow — currently missing)
+- [ ] **GitHub repo secrets** set for ingest crons: `DATABASE_URL`, `SENTRY_DSN` (and add `GEMINI_API_KEY` + `OPENAI_API_KEY` + an `enrich-skus` scheduled workflow — currently missing)
 - [ ] Vercel env vars set (Part E), `DATABASE_URL` = **pooled** URL
 - [ ] Cost cap set manually in Google AI Studio / Cloud billing (hard spend ceiling — the only backstop beyond per-request caps)
 - [ ] Upstash rate-limit verified live (30 req/60s per (ip,device)); confirm graceful behavior if Upstash is down

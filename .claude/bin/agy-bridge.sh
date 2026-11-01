@@ -17,7 +17,7 @@
 # dispatcher `antigravity-dispatch.sh` (which talked to the IDE and could
 # not return an answer) was removed 2026-08-13; this route returns answers.
 #
-# Verified on this machine 2026-08-13 (agy 1.1.12):
+# Observed behaviour, checked 2026-08-13 against agy 1.1.12:
 #   - `agy -p` / `--print` runs a single prompt non-interactively and prints
 #     the response; `--output-format json` wraps it in a JSON envelope.
 #   - `agy -p -` does NOT read the prompt from stdin. The prompt must be an

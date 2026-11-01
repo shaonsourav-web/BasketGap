@@ -7,6 +7,7 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/dist/**',
       '**/coverage/**',
+      '**/.expo/**',
       '**/.turbo/**',
       '**/*.d.ts',
       'packages/shared/src/db/schema.ts',

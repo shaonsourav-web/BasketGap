@@ -49,8 +49,7 @@ The Codex and Antigravity tiers dispatch through tested bridge scripts —
 strict failure semantics (a `"status":"SUCCESS"` envelope with no usable
 `response` field is still a failed dispatch). Their own test suite
 (`.claude/bin/tests/test-bridges.sh`, 63 assertions against fake shims, no
-auth needed) passed unmodified on this local machine, confirmed
-2026-08-14.
+auth needed) covers the failure paths.
 
 ```
 # Codex tiers (sol/terra/luna) — prompt passed as a FILE, not inline
@@ -60,12 +59,8 @@ auth needed) passed unmodified on this local machine, confirmed
 .claude/bin/agy-bridge.sh <low|medium|high> <prompt-file>
 ```
 
-Both are already installed and authenticated on this machine — Codex via
-ChatGPT login, `agy` via free Google account login, no API key either way.
-`codex` is on PATH; `agy` needs `%LOCALAPPDATA%\agy\bin` on PATH (the
-installer added it to the registry — a fresh terminal picks it up
-automatically; an already-open shell needs
-`export PATH="$PATH:[agy-install-dir]"` for that session).
+Both CLIs must be installed, authenticated and on PATH before dispatching;
+neither route needs an API key in this repo.
 
 `agy-bridge.sh` always runs `--dangerously-skip-permissions` (headless mode
 has no terminal to answer a permission prompt) with no sandbox — its
@@ -83,9 +78,9 @@ No delegated task, from any tier, is accepted until the Director has:
    repo root (or the equivalent scoped command inside `packages/workers` if
    the task only touched that package).
 3. If the task touched the matching pipeline, confirmed the degradation
-   path still holds: with no `GEMINI_API_KEY` the engine runs trigram-only
-   and rank-only, i.e. fully offline deterministic. This is documented,
-   load-bearing behavior — a change that quietly requires the key to
+   path still holds: with neither `GEMINI_API_KEY` nor `OPENAI_API_KEY` the
+   engine runs deterministic-only, trigram and rank only. This is documented,
+   load-bearing behavior — a change that quietly requires a key to
    function is a regression, not an improvement.
 4. Actually exercised the change — run the relevant `workers` CLI command
    against real or fixture data (`pnpm --filter @basketgap/workers ingest ...`,
@@ -117,8 +112,8 @@ Workspace packages:
 
 Package commands:
 
-- `pnpm --filter @basketgap/workers ping`
-- `pnpm --filter @basketgap/workers ingest coles-pdf|woolies-pdf|coles-web|woolies-web [--fixture <path> | --source-url <url>] [--dry-run] [--force-refresh]`
+- `pnpm --filter @basketgap/workers run ping` (use `run`: bare `pnpm ping` is a built-in pnpm command, not the package script)
+- `pnpm --filter @basketgap/workers ingest import --file <path.json|path.csv> [--dry-run] [--force-refresh]` (the built-in adapter; retailer plugins are optional, live outside this repo and are loaded via the `BASKETGAP_INGEST_PLUGINS` env var, see `docs/ingest-adapters.md`)
 - `pnpm --filter @basketgap/workers exec tsx src/cli.ts match --line "<text>" | --list <file>|-`
 - `pnpm --filter @basketgap/workers exec tsx src/cli.ts seed canonical [--dry-run] [--force-refresh]`
 - `pnpm --filter @basketgap/workers exec tsx src/cli.ts enrich-skus [--retailer coles|woolies] [--limit N] [--dry-run]`
@@ -128,9 +123,9 @@ Package commands:
 - `pnpm --filter @basketgap/api dev` (Vercel development server)
 - `pnpm --filter @basketgap/api dev:node` (standalone Node development server)
 
-All of the above read `.env.local` at the repo root via `--env-file`; it
-currently holds placeholders (see project notes) — real
-credentials are a prerequisite for anything beyond dry-run/fixture use.
+All of the above read `.env.local` at the repo root via `--env-file` (create
+it from `.env.example`) — real credentials are a prerequisite for anything
+beyond dry-run/fixture use.
 
 ## Repo etiquette
 

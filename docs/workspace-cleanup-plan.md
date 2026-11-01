@@ -1,48 +1,17 @@
 # Workspace cleanup plan
 
-Audit date: 2026-08-24. Scope: the BasketGap pnpm monorepo and its three projects (`api`, `shared`, and `workers`), plus repository infrastructure.
+## Review — 2026-09-05
 
-## Classification
+The product goal is a trustworthy comparison of a shopper's list using available retailer offers. The API now attaches offers and resolves postcode to state; production rate limiting rejects requests when its required limiter is absent. The mobile package is in progress and still uses offline mock comparison data. Live data freshness, deployment state, and end-to-end correctness require separate verification; local source inspection cannot establish them.
 
-| Project              | State                            | Evidence                                                                                                                                               |
-| -------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `@basketgap/shared`  | Active, partly unfinished        | Matching engine and 200-line eval are healthy; multipack output, basket batching, and production catalogue breadth remain unfinished.                  |
-| `@basketgap/workers` | Active, operationally unfinished | Four adapters, seed, and enrichment commands exist; live seed/ingest/enrich and a scheduled enrichment workflow have not been completed.               |
-| `@basketgap/api`     | Active, product-blocked          | Security and request plumbing exist, but the response does not yet aggregate retailer prices. Upstash failure policy and deployment remain unresolved. |
-| Repository/CI        | Active, cleanup needed           | Seven commits are ahead of `origin/main`; production secrets and deployment are owner-controlled. Documentation and a few local artifacts had drifted. |
+The remaining work should be ordered by customer impact:
 
-No abandoned project or duplicated source tree was found. The only true duplicate was an ignored `.claude/settings.local.json.` copy. The empty `packages/workers/drizzle/` directory, dead workers `src/index.ts`, and an untracked macOS backup were stale artifacts rather than active work.
+1. Connect the mobile comparison flow to the real offers response, specifying quantity handling, comparable totals, missing prices, and stale or unavailable offers. A missing offer must never count as a zero price.
+2. Verify one complete basket against current retailer data through the supported capture/ingest/enrich path before claiming production readiness.
+3. Correct per-line LLM truncation reporting: reaching the basket-wide cap does not prove an earlier declined match was truncated.
 
-## Priority plan
+Batching, vector-search shortcuts, new size abstractions, and another enrichment cron are not established launch requirements. Add them only when measured latency, repeated complexity, or a demonstrated freshness gap justifies them. The current capture runbook already includes enrichment.
 
-### P0 — block production
+The low-confidence cache safeguards and truthful eval IDs remain useful correctness boundaries. The standalone API server and offline playground serve different verification tasks and are not duplicate applications. No new runtime abstraction or automation is needed for this review.
 
-1. Add a price-aggregation boundary to `/api/match`: for each accepted canonical product, return current Coles and Woolworths observations for the requested postcode/zone. Specify and test behavior for missing/stale prices.
-2. Decide and test the rate-limit failure policy. The current implementation fails open when Upstash configuration or calls fail, so it does not satisfy the documented “every request is rate-limited” claim.
-3. Bootstrap production data in order: canonical seed → four live ingesters → SKU enrichment → re-embedding/index tuning. Verify the API against real retailer observations.
-4. Configure Vercel/Upstash/secrets/cost caps, preview-test, then deploy. Push the seven local commits and verify CI only with owner approval.
-
-### P1 — finish before customer launch
-
-1. Add a scheduled `enrich-skus` workflow and alerting.
-2. Return extracted multipack quantity and use it when pricing pack requests.
-3. Batch basket embeddings/queries and short-circuit vector search after exact direct hits.
-4. Fix LLM-cap truncation accounting so only rejected calls mark an individual result truncated.
-5. Remove or implement the currently accepted-but-unused `postcode` behavior as part of price aggregation.
-
-### P2 — maintainability
-
-1. Deduplicate the repeated popularity subquery/row mapping in matching DB loaders when that area is next changed.
-2. Introduce a shared nullable size value object if size handling expands further.
-3. Use the repository-pinned Node 24 locally; Node 26 currently works but emits engine warnings.
-
-## Safely completed in this pass
-
-- Prevented `needs_attention` matches from exposing or caching a canonical ID, and ignored stale low-confidence cache records.
-- Made the eval harness inspect the real returned ID instead of masking leaks.
-- Added an explicit prompt-injection boundary for shopping-list text.
-- Restored Sentry's documented no-op behavior when no DSN is configured.
-- Removed the stale backup, exact ignored settings duplicate, empty Drizzle directory, and dead workers placeholder entrypoint.
-- Added the standalone API development command and explicit Vercel framework setting.
-- Updated Hono, its Zod validator, Sentry, and Upstash; pinned patched transitive `undici` and `brace-expansion`. The production audit now reports no known vulnerabilities and peer checks are clean.
-- Updated README, agent commands, schema path, and Round 8.5 status to match the repository.
+Evidence: `packages/api/src/routes/match.ts`, `packages/api/src/middleware/rate-limit.ts`, `packages/api/src/lib/llm-cap.ts`, `packages/api/src/__tests__/app.test.ts`, `packages/api/src/__tests__/security.test.ts`, `packages/mobile/src/mock/`, and `docs/ingest-cadence.md`.

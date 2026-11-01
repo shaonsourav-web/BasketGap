@@ -11,10 +11,10 @@
 ## 2026-05-16
 
 - **v1 scope expanded to include Down Down (Coles) and Prices Dropped (Woolworths) web surfaces.**
-  Previously v1 was catalogue-PDF-only. Adding the always-current web "specials" pages closes a credibility gap (PDFs miss thousands of currently-active reductions). Architecture stays additive: PDF adapter is primary per retailer; web adapter runs daily and writes into the same `specials` table via a `source_type` discriminator. Accepts a softer legal posture than PDFs (public web pages vs. distributed marketing material) — mitigated by browser-like requests, slow pacing, respect for robots.txt.
+  Previously v1 was catalogue-PDF-only. Adding the always-current web "specials" pages closes a credibility gap (PDFs miss thousands of currently-active reductions). Architecture stays additive: PDF adapter is primary per retailer; web adapter runs daily and writes into the same `specials` table via a `source_type` discriminator. Accepts a softer legal posture than PDFs (public web pages vs. distributed marketing material) — mitigated by conservative request pacing and respect for robots.txt.
 
 - **ALDI deferred to v1.1.**
-  v1 covers Coles and Woolworths only. ALDI weekly catalogues and Special Buys are noted in `catalogue-research-notes.md` but are not in scope until after v1 ships. Reason: narrower v1 ships faster and lets the matching engine mature against two retailers before adding a third with different cadence and category mix.
+  v1 covers Coles and Woolworths only. ALDI weekly catalogues and Special Buys are noted in the retailer research notes (now kept outside this repository) but are not in scope until after v1 ships. Reason: narrower v1 ships faster and lets the matching engine mature against two retailers before adding a third with different cadence and category mix.
 
 - **Refresh cadence changed from "nightly baseline + targeted refresh" to source-specific schedules.**
   - Catalogue PDFs: polled Wednesdays every 30 minutes, 3am–6pm Sydney, until a new catalogue is detected and successfully ingested. If 6pm Wednesday passes with no new catalogue, an alert fires.
@@ -30,7 +30,7 @@
   Reserves `apps/*` and `packages/*` globs in `pnpm-workspace.yaml` for future `api`, `shared`, and `mobile` siblings. Avoids restructuring when those land. Root is `private: true` with `packageManager: pnpm@11.0.9` pinned via Corepack; Node 24 pinned via `.nvmrc` and `engines.node` on every package.
 
 - **DB access from workers: Drizzle ORM + postgres-js, transaction pooler 6543.**
-  `@supabase/supabase-js` is not used in workers — that client is reserved for the eventual mobile/API surfaces. postgres-js is configured with `{ prepare: false, max: 1 }`: pgbouncer transaction mode does not support cross-transaction prepared statements, and cron workers are ephemeral so a single connection is the right shape. Pooler hostname is region-specific (`aws-N-REGION.pooler.supabase.com` for this project); copy the exact connection string from Supabase dashboard → Connect → Transaction pooler rather than hand-assembling.
+  `@supabase/supabase-js` is not used in workers — that client is reserved for the eventual mobile/API surfaces. postgres-js is configured with `{ prepare: false, max: 1 }`: pgbouncer transaction mode does not support cross-transaction prepared statements, and cron workers are ephemeral so a single connection is the right shape. Pooler hostname is project-specific; copy the exact connection string from Supabase dashboard → Connect → Transaction pooler rather than hand-assembling.
 
 - **Drizzle schema hand-written (now at `packages/shared/src/db/schema.ts`), not pulled.**
   Plan called for `drizzle-kit pull` to bootstrap the schema file. drizzle-kit 0.31.10 crashes parsing this DB's CHECK constraints (`Cannot read properties of undefined (reading 'replace')` at bin.cjs:17861), and the 1.0.0-rc.2 line requires a drizzle-orm bump that introduces incompatible internal subpath exports. Hand-writing from a direct `information_schema` introspection is the path the plan reserves for the matching-engine round (when Drizzle becomes hand-evolved + `generate`); we just arrive there earlier. Supabase migrations under `supabase/migrations/` remain the single source of truth — any schema change re-runs the introspection and updates `schema.ts` accordingly. CI drift check still deferred.
@@ -71,7 +71,7 @@
   GitHub Actions cron is in UTC, so the AEST window splits across two days: Tue 17:00–23:30 UTC and Wed 00:00–08:00 UTC. Both cron expressions are listed under `schedule:`. `concurrency: ingest-coles-pdf` prevents overlap if a run drags. Cron job exits 0 with a "no source URL configured" log when neither the repo Variable `CATALOGUE_URL_COLES` nor a `workflow_dispatch` input is supplied — keeps the schedule wired without failing when the live URL is still TBD.
 
 - **Live PDF URL discovery deferred.**
-  `[retailer-site]` is a JavaScript-rendered SPA; static HTML contains no PDF URLs. Discovery options (reverse-engineering Coles' backend API, headless browser via Playwright) carry separate legal/operational risk and bring their own dependency stack. Both will land paired with the Down Down web adapter round, which already needs a headless browser. Until then, this adapter is fixture-driven plus `workflow_dispatch` with a manual URL input.
+  The retailer's catalogue index is a JavaScript-rendered SPA; static HTML contains no PDF URLs. Discovery options (reverse-engineering Coles' backend API, headless browser via Playwright) carry separate legal/operational risk and bring their own dependency stack. Both will land paired with the Down Down web adapter round, which already needs a headless browser. Until then, this adapter is fixture-driven plus `workflow_dispatch` with a manual URL input.
 
 - **CI does not run the ingest workflow.**
   `.github/workflows/ci.yml` (lint/typecheck/test/format-check) is the only workflow on `push` and `pull_request`. The new `ingest-coles-pdf.yml` runs only on `schedule` and `workflow_dispatch`. Test-suite integration tests against the live DB are gated by `DATABASE_URL` and skip in CI (env not set). Live integration tests remain a local-developer concern this round; running them in CI requires careful network egress + test-data isolation that's not worth setting up before the matching engine round.
@@ -98,7 +98,7 @@
   `.github/workflows/ingest-coles-pdf.yml` and `.github/workflows/ingest-woolies-pdf.yml` use identical cron expressions (Wed 03:00–18:00 AEST, every 30 min, split across two UTC ranges) but each has its own `concurrency.group` so a regression in one retailer's parser doesn't pause the other. Both gracefully exit 0 when their respective repo Variable (`CATALOGUE_URL_COLES` / `CATALOGUE_URL_WOOLIES`) is unset, so the schedules stay wired without failing until the live URLs are supplied.
 
 - **Coles "Down Down" web adapter via Playwright + cheerio.**
-  `[retailer-site]` is a JS-rendered SPA; raw `fetch` returns an empty shell. `_shared/browser.ts` wraps Playwright headless Chromium with a single `renderHtml(url, { waitForSelector })` entrypoint that navigates `domcontentloaded`, waits for the product-tile selector, performs a small number of scroll passes to trigger lazy-loaded tiles, and returns the rendered HTML as a `CatalogueSource`. The Coles-web parser is pure cheerio over that HTML and shares the existing `_shared/persist.ts` writer. The DB already accepts `catalogues.source_type = 'web'` and `specials.promo_type = 'down_down'`, so no schema change. `ParsedCatalogue.sourceType` widened from `'pdf'` to `'pdf' | 'web'`.
+  The Coles specials page is a JS-rendered SPA; raw `fetch` returns an empty shell. `_shared/browser.ts` wraps Playwright headless Chromium with a single `renderHtml(url, { waitForSelector })` entrypoint that navigates `domcontentloaded`, waits for the product-tile selector, performs a small number of scroll passes to trigger lazy-loaded tiles, and returns the rendered HTML as a `CatalogueSource`. The Coles-web parser is pure cheerio over that HTML and shares the existing `_shared/persist.ts` writer. The DB already accepts `catalogues.source_type = 'web'` and `specials.promo_type = 'down_down'`, so no schema change. `ParsedCatalogue.sourceType` widened from `'pdf'` to `'pdf' | 'web'`.
 
 - **HTML fixtures committed; no synthesized HTML at test time.**
   PDFs are distributed marketing material — we render them at test time via `pdf-lib`. Web pages render small enough that committing a hand-crafted HTML fixture (`test/fixtures/coles-down-down-sample.html`) keeps tests deterministic without ever copying real Coles content. The fixture covers Down Down, half-price, percent-off, multi-buy, member-locked (must drop), and a save-only-in-promo-line tile.
@@ -107,7 +107,7 @@
   `.github/workflows/ingest-coles-web.yml` runs `0 20 * * *` (UTC) plus `workflow_dispatch`. No 30-min retry sweep like PDFs — these pages mutate continuously, so multiple fires per day would over-count. Concurrency group `ingest-coles-web`, gated on `vars.CATALOGUE_URL_COLES_WEB` (skips gracefully when unset). The Playwright browser binary is installed inside the workflow via `pnpm --filter @basketgap/workers exec playwright install --with-deps chromium`. The lint/typecheck/test CI workflow does **not** install browsers — unit tests parse the committed HTML fixture.
 
 - **Woolworths "Prices Dropped" web adapter mirrors the Coles-web shape.**
-  `packages/workers/src/adapters/woolies-web/{parse,index}.ts` reuses every shared module from Round 5 (`_shared/browser.ts`, `_shared/persist.ts`, `loadHtmlFromFixture`). The only Woolies-specific code is the cheerio parser (different tile selectors — `[tile-selector]`, `[data-testid="tile"]`, `.product-tile-v2`) and the orchestrator. Same parser/fixture/persist/CLI pattern as Coles-web; same idempotency-on-source-hash; same silent member-locked drop. Promotion taxonomy already supports `'prices_dropped'` (added in Round 4 for the PDF parser). Two specialist parsers beat one general-purpose parser with a retailer flag — same call as the PDF round.
+  `packages/workers/src/adapters/woolies-web/{parse,index}.ts` reuses every shared module from Round 5 (`_shared/browser.ts`, `_shared/persist.ts`, `loadHtmlFromFixture`). The only Woolies-specific code is the cheerio parser (different tile markup from Coles) and the orchestrator. Same parser/fixture/persist/CLI pattern as Coles-web; same idempotency-on-source-hash; same silent member-locked drop. Promotion taxonomy already supports `'prices_dropped'` (added in Round 4 for the PDF parser). Two specialist parsers beat one general-purpose parser with a retailer flag — same call as the PDF round.
 
 - **Daily Woolies-web cron offset 30 min from Coles-web.**
   `.github/workflows/ingest-woolies-web.yml` runs `30 20 * * *` (UTC) — 06:30 AEST. Stagger avoids GitHub-side minute-of-hour contention and isolates failure modes so one retailer's parser regression doesn't pause the other. Concurrency group `ingest-woolies-web`, gated on `vars.CATALOGUE_URL_WOOLIES_WEB`. Same skip-gracefully-when-unset behaviour as the other three cron workflows.
@@ -225,11 +225,11 @@
 - **Independent blind gold sets are now the accuracy gate** (`packages/shared/src/matching/__tests__/eval/blind/`): 426 lines by Codex, 300 by Opus, each written from the seed file only. The in-house 200-line eval had shared the engine's blind spots (it said 99.0% while the blind baseline was 66.5%).
 - Engine changes: brand similarity separated from name similarity (brand agreement can lift a decent name match to _assumed_, never to _matched_); retailer/descriptor noise stripping (words appearing in canonical names are excluded — QC F2); spell-corrector hardened (first-letter pin, ≤1-char shrink, doubled-letter rule, PROTECTED_WORDS); leading-size head defaults; bare-number/orphan-pack stripping; 0.65-name-sim → assumed floor; ~170 new AU shorthand/typo entries; self-map guards (lamb/pork/turkey/chicken mince defer rather than defaulting to beef).
 - Results at 98ab50c: codex set 98.9% correct match / 0 wrong picks / 97.6% accepted precision; opus set 98.3% / 0 / 99.6%; in-house 99.5%. Remaining "false accepts" on the codex set are bare generic heads resolving via documented HEAD_DEFAULTS — a labelling philosophy difference, kept as designed.
-- Live catalogue capture: retailers block headless browsers; current-week specials were captured via the owner's Chrome session (287 Coles + 38 Woolies) and ingested through the web-adapter fixtures. Historical weeks are not published; history accrues from weekly ingests. Coles DOM still matches `[tile-selector]`; Woolworths moved to `[tile-selector]` shadow-DOM web components — **woolies-web adapter selectors need a rewrite before live scraping can work**.
+- Live catalogue capture: retailers block headless browsers; current-week specials were captured via the owner's Chrome session (287 Coles + 38 Woolies) and ingested through the web-adapter fixtures. Historical weeks are not published; history accrues from weekly ingests. Coles' page structure was unchanged; Woolworths had moved its product tiles into shadow-DOM web components — **the woolies-web adapter's extraction needed a rewrite before live scraping could work**.
 
 ## 2026-09-02 — Three-lane round: shadow-DOM adapter, bare-head banding, ingest cadence
 
-- **woolies-web adapter rewritten for `[tile-selector]` shadow DOM** (built by Opus, verified by Fable): extraction now happens in-page via `locator.evaluateAll` reading open shadow roots (`tiles.ts` pure mapping layer + `scrape.ts` live path); the dead `/specials/prices-dropped` route is rewritten to the current specials routes with per-route fallback; all-routes-empty returns a graceful `blocked_or_empty` outcome (no DB write, no crash) — the expected result from CI/datacentre IPs. External adapter contract unchanged; cheerio retained for fixture parsing only, plus a `parseTilesJson` path for owner-Chrome captures.
+- **woolies-web adapter rewritten for shadow-DOM product tiles** (built by Opus, verified by Fable): extraction now happens in-page via `locator.evaluateAll` reading open shadow roots (`tiles.ts` pure mapping layer + `scrape.ts` live path); the dead specials route is rewritten to the current routes with per-route fallback; all-routes-empty returns a graceful `blocked_or_empty` outcome (no DB write, no crash) — the expected result from CI/datacentre IPs. External adapter contract unchanged; cheerio retained for fixture parsing only, plus a `parseTilesJson` path for owner-Chrome captures.
 - **Bare generic heads now cap at the `assumed` band**: when HEAD*DEFAULTS resolves a line that is purely a bare head (size/pack tokens aside — "coffee", "rice", "milk 2L"), the band is demoted `matched → assumed` so the UI flags the engine's assumption; score, thresholds, weights and step order untouched; cap recorded in the audit trail. Cache keys gain a `|head-default` suffix \_only* when the cap fired, so no existing `match_cache` entry is invalidated and capped lines never share an entry with fully-typed ones. Blind gates re-verified identical (codex 98.9% / 0 wrong / 97.6% precision; opus 98.3% / 0 / 100%).
 - **Ingest cadence set to weekly Wednesday morning Sydney** (UTC crons `0/30 20-21 * * 2`, DST drift documented in each workflow): PDFs automated; the two web crons are marked expected-to-be-blocked and classify outcomes green (items) / warn-green (`BLOCKED_OR_EMPTY`) / red (real error). The supported weekly path for web specials is the owner capture runbook `packages/workers/scripts/CAPTURE.md` with `make-fixtures.py` (ported from scratchpad, byte-identical output); see `docs/ingest-cadence.md`.
 
@@ -347,3 +347,162 @@
   the cache into unbounded text storage. Declared as a table constraint only —
   `schema.ts` does not declare the existing `match_cache` checks either, so it
   stays the migration's business.
+
+## Round 10 — mobile UI shell
+
+- **Mobile lives at `packages/mobile`, on Expo SDK 57 rather than 53/54.**
+  The plan named SDK 53/54, but Expo Go only ships clients for the current SDK
+  line, and the iOS Simulator runtime current at the time was iOS 26.5 under
+  Xcode 26.6 — an SDK 54 client cannot be installed there, so the app would have been unrunnable as
+  specified. SDK 57 (`expo ~57.0.20`, React Native 0.86.3, React 19.2.3) is the
+  current stable line and matches the dependency set Expo's own default
+  template ships. Verified end to end in the iOS Simulator.
+- **`engines.node` on `@basketgap/mobile` is `>=24.0.0`, with no upper bound.**
+  Every other package pins `>=24.0.0 <25`. Expo's toolchain runs fine on newer
+  Node and pinning the app to 24 would block anyone on a current runtime; pnpm
+  already emits (non-fatal) engine warnings for the other packages on Node 26.
+- **No Metro or Babel config.** Expo's defaults resolve the pnpm-isolated
+  `node_modules` layout without help — `expo export --platform ios` bundles
+  1,265 modules clean from the workspace. Adding a monorepo `metro.config.js`
+  or `node-linker=hoisted` would have been cargo cult.
+- **One accent, and it is teal — deliberately neither red nor green.**
+  A green accent would read as a nudge towards Woolworths and a red one towards
+  Coles. Retailer colours appear only as 6–8px identity dots beside a store's
+  name. Difference amounts are set in ink, not in the cheaper store's colour,
+  so a price gap never reads as an alarm or an endorsement.
+- **Type: Outfit for the brand and every figure, Plus Jakarta Sans for running
+  text**, both via `@expo-google-fonts`. Fonts are awaited behind the splash
+  screen, because the wordmark is the first thing on screen.
+- **The compare engine is mocked, in `src/mock/`, not stubbed behind a flag.**
+  `/api/match` returns canonical matches but no prices yet. The mock is
+  deterministic and offline, computes in integer cents, and produces the same
+  shapes the API will (`ConfidenceBand` and `Retailer` are imported as types
+  from `@basketgap/shared`, so the app cannot drift from the engine's
+  vocabulary). Ties in the split basket go to whichever store is already
+  cheaper overall, so a mixed basket never adds a second stop for nothing.
+- **Postcode is the only thing persisted** (`AsyncStorage`, key
+  `basketgap.postcode`). Lists are held in memory for the session only, per the
+  spec's storage promise.
+
+## 2026-11-01 — LLM fallback moves to OpenAI; embeddings stay on Gemini
+
+- **Owner decision: the LLM disambiguation fallback uses OpenAI.** This partly
+  reverses the 2026-09-02 single-provider consolidation (commit `6733b2b`):
+  embeddings stay on Gemini `gemini-embedding-001` at 1536 dims, unchanged —
+  same client, same normalisation, same stored vectors, so **no re-seed and no
+  migration**. Only the choose call moved, into a new
+  `matching/lib/openai.ts`; `matching/lib/gemini.ts` is now embeddings-only.
+  Plain `fetch` through the existing `fetchExternal` boundary — no SDK, as no
+  provider in this repo uses one.
+
+- **Default model `gpt-6-luna`, overridable via `OPENAI_LLM_MODEL`.** Picked
+  from OpenAI's model docs (checked 2026-11-01) as the cheapest current model
+  with Structured Outputs support: $0.10 / 1M input, $0.50 / 1M output. At
+  ~350 input / ~25 output tokens per call that is ≈ $0.00005 per call and
+  ≈ $0.0005 for a request that exhausts the default `MAX_LLM_CALLS_PER_REQUEST`
+  of 10 — roughly a third of the Gemini 2.5 Flash figure. `GEMINI_LLM_MODEL`
+  is removed (a stale value left in a deployment is silently ignored by the env
+  schema, not an error).
+
+- **Responses API (`POST /v1/responses`), strict JSON schema.** OpenAI's docs
+  recommend Responses over Chat Completions for the GPT-6 line. The request
+  sets `text.format = {type: 'json_schema', strict: true}` with
+  `{chosenId: string|null, confidence: number}`, `additionalProperties: false`,
+  both fields required, and `chosenId` carrying an `enum` of exactly the
+  shortlist ids plus `null` — so the purpose-lock is structural, exactly as it
+  was under Gemini's `responseSchema`. Step 08's `chosenId ∈ shortlist` check
+  is untouched as defence in depth. The raw HTTP response has no top-level
+  `output_text` (an SDK convenience); the text is read from `output[]` message
+  items, skipping any reasoning items.
+
+- **Reasoning effort `none` + `temperature: 0`.** OpenAI documents that
+  `temperature` must be removed whenever effort is not `none`, and that GPT-6
+  Astra / GPT-6.1 Sol do not accept `none` at all (HTTP 400). Classification
+  from a short list is the use case `none` is documented for, and it keeps
+  `temperature: 0` legal, so the call stays as close to deterministic as the
+  provider allows. Consequence the owner should know: `OPENAI_LLM_MODEL` must
+  name a model that accepts effort `none` (Luna, 6.1 Terra, 6 Sol at time of
+  writing); anything else makes every fallback call fail.
+
+- **Three new hardening choices on the OpenAI call, none of which change a
+  band, weight, threshold or step order.** `store: false` (the Responses API
+  retains responses by default; nothing here needs it, and the security doc
+  forbids retaining raw prompts). `max_output_tokens: 128` bounds spend on a
+  misbehaving response; a truncated answer (`status: 'incomplete'`) throws
+  rather than being parsed. A `refusal` content part becomes a decline
+  (`chosenId: null`, confidence 0), never a pick, and its text is not stored.
+  `confidence` is now bounded `[0, 1]` both in the schema and by a local clamp,
+  because the pipeline lifts the chosen candidate's score to the LLM's
+  confidence — an out-of-range number would otherwise have minted a `matched`
+  band and a cache row. The provenance tag is written locally as
+  `openai:<model>`, as before.
+
+- **The degradation matrix is back to four states, keyed independently.**
+  `createDbContext` now takes `geminiKey` (→ `hasEmbeddings`) and `openaiKey`
+  (→ `hasLlm`) separately. Neither key → trigram-only and rank-only, fully
+  offline and deterministic, zero network calls (byte-for-byte the previous
+  keyless path, which is what CI and every eval gate exercise). Gemini only →
+  vector search, no LLM fallback. OpenAI only → no embedding call, LLM fallback
+  on. Both → both. A new non-live test (`provider-matrix.test.ts`) drives all
+  four through the real `createDbContextFromEnv` + `matchLine` with stubbed
+  `fetch`, asserting which provider hosts each combination touches. The
+  provider-agnostic context names from 2026-09-02 (`hasEmbeddings`, `hasLlm`,
+  `llmModel`) are why the pipeline steps did not change at all.
+
+- **Spend ceilings are in two dashboards again** (Google for embeddings, OpenAI
+  for the fallback) — the operational cost of this split that the 2026-09-02
+  entry had removed. `withLlmCap` semantics are untouched; it caps only the
+  OpenAI choose calls, never embeddings.
+
+## 2026-11-01 — Retailer ingest adapters move to a private repo
+
+- **Owner decision (2026-11-01): retailer-specific scraping code leaves the
+  public repo before it is published under AGPL-3.0.** Woolworths' terms
+  prohibit robots and Coles restricts use of its site; publishing working
+  scrapers, their selectors and target URLs would hand that legal risk to the
+  project and to anyone who runs it. The four adapters (`coles-pdf`,
+  `woolies-pdf`, `coles-web`, `woolies-web`), the HTTP/Playwright fetchers and
+  their user-agents, the owner capture runbook and `make-fixtures.py`, the
+  retailer-shaped fixtures, the scheduled ingest workflows and the retailer
+  research notes now live in a separate private repo, `BasketGap-private-ingest`.
+  The 2026-05-16 "softer legal posture" accepted for web surfaces is
+  superseded for the public codebase; it is the private repo's concern now.
+
+- **The boundary is "generic pipeline public, retailer knowledge private".**
+  Public keeps the adapter contract (`IngestAdapter`, `ParsedCatalogue`,
+  `IngestOptions`/`IngestResult`), the hash-keyed upsert (`persistCatalogue`),
+  the dry-run/persist tail every adapter repeated (`finishIngest`, now shared),
+  the local-file loader, the 14-day freshness rule and the whole matching
+  engine. These are exported to plugins as `@basketgap/workers/adapter-kit`.
+  Moved adapters were rewired onto that kit and produce byte-identical dry-run
+  results on the same fixtures.
+
+- **Retailer adapters plug in through `BASKETGAP_INGEST_PLUGINS`.** A
+  comma-separated list of module paths or package names; each module exports
+  `adapters: IngestAdapter[]`. The registry validates names and shapes,
+  refuses to let a plugin shadow a built-in, and reports a broken plugin on
+  stderr without losing the other adapters. An env var rather than a workspace
+  member was chosen so the public lockfile and `pnpm -r` never learn the
+  private package exists; the private repo instead depends on the public
+  packages with `link:` paths and expects a sibling checkout. Unset, the CLI
+  prints that no plugins are installed and points at the built-in adapter;
+  nothing else in the public repo needs a plugin, so lint/typecheck/test and
+  the keyless matching path are unaffected.
+
+- **A retailer-neutral `import` adapter replaces scraping as the public way
+  in.** It reads a local JSON or CSV file in a versioned format
+  (`basketgap-specials` v1, documented in `docs/ingest-adapters.md`, synthetic
+  examples in `packages/workers/examples/import/`) and never touches the
+  network. File-level problems throw before anything is written; bad rows are
+  skipped with a named warning. Savings are always computed, never accepted,
+  so they cannot disagree with the prices. Member-locked rows are rejected,
+  the same precision-first rule the catalogue parsers apply (v1 has no member
+  pricing). `confidenceScore` is 1: structured input has no layout inference
+  to discount. The source URL is recorded as `import://<file name>`, not the
+  contributor's local path.
+
+- **The scraper user-agent no longer carries a personal email.** The private
+  PDF fetcher identifies as `BasketGap/0.0 (+https://github.com/shaonsourav-web/BasketGap)`.
+  The old address remains in git history; purging it (and the moved paths)
+  from the public history is a separate, deliberate step whose inputs live in
+  the private repo's `history-purge/`.

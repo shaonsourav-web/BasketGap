@@ -1,0 +1,62 @@
+name: Feature request
+description: Suggest an improvement or a new capability.
+title: 'feat: '
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion. Please check [docs/ROADMAP.md](https://github.com/shaonsourav-web/BasketGap/blob/main/docs/ROADMAP.md) first: it lists what is planned and what is deliberately out of scope for v1 (for example ordering, accounts, and scraping shelf prices).
+
+        Please do not attach retailer content (catalogue PDFs, screenshots of retailer sites or apps, product images, or real price dumps).
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the situation, not just the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What do you propose?
+      description: A rough sketch is fine.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of the project would it touch?
+      options:
+        - Matching engine (packages/shared)
+        - API (packages/api)
+        - Workers / ingestion (packages/workers)
+        - Mobile app (packages/mobile)
+        - Documentation
+        - CI / tooling
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: contribute
+    attributes:
+      label: Would you like to work on it?
+      options:
+        - Yes, I would like to open a pull request
+        - Maybe, with guidance
+        - No, I am only suggesting it
+    validations:
+      required: true
+  - type: checkboxes
+    id: principles
+    attributes:
+      label: Fit with the project
+      options:
+        - label: I understand BasketGap states totals and differences but does not tell people where to shop, and that totals must be like-for-like with missing prices never counted as zero.
+          required: true
+        - label: This suggestion does not require adding retailer content to the repository.
+          required: true
