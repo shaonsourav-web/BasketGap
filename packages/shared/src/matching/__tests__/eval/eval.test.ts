@@ -11,7 +11,7 @@ import { CANONICAL_NAMES, createOfflineContext } from './offline-catalogue.ts';
  *
  * This suite is a **measurement gate**, not a correctness suite. It runs the
  * labelled set through the real pipeline with a fully offline context (no
- * GEMINI_API_KEY, no database) and prints a readable
+ * GEMINI_API_KEY or OPENAI_API_KEY, no database) and prints a readable
  * quality baseline. Assertions here only guard the harness itself and a floor
  * the deterministic path genuinely clears today — they are deliberately loose
  * so the numbers stay informational and the suite never goes red for a quality

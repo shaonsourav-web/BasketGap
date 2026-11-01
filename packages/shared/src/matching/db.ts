@@ -4,12 +4,8 @@ import type { Db } from '../db/client.ts';
 import { matchCache } from '../db/schema.ts';
 import type { BaseEnv } from '../lib/env.ts';
 
-import {
-  chooseWithLlm,
-  DEFAULT_GEMINI_EMBEDDING_MODEL,
-  DEFAULT_GEMINI_LLM_MODEL,
-  embedText,
-} from './lib/gemini.ts';
+import { DEFAULT_GEMINI_EMBEDDING_MODEL, embedText } from './lib/gemini.ts';
+import { chooseWithLlm, DEFAULT_OPENAI_LLM_MODEL } from './lib/openai.ts';
 import { hitsToPrior } from './lib/popularity.ts';
 import type {
   CachedMatch,
@@ -23,20 +19,22 @@ import type {
 
 export interface DbContextOptions {
   db: Db;
-  /** One Gemini key enables both tiers: embeddings and the LLM fallback. */
+  /** Enables the vector tier (Gemini embeddings). Absent → trigram-only. */
   geminiKey?: string | undefined;
+  /** Enables the LLM disambiguation fallback (OpenAI). Absent → rank-only. */
+  openaiKey?: string | undefined;
   llmModel?: string | undefined;
   embeddingModel?: string | undefined;
 }
 
 export function createDbContext(options: DbContextOptions): PipelineContext {
-  const { db, geminiKey, llmModel, embeddingModel } = options;
+  const { db, geminiKey, openaiKey, llmModel, embeddingModel } = options;
   let knownBrandsPromise: Promise<string[]> | null = null;
 
   return {
     hasEmbeddings: Boolean(geminiKey),
-    hasLlm: Boolean(geminiKey),
-    llmModel: llmModel ?? DEFAULT_GEMINI_LLM_MODEL,
+    hasLlm: Boolean(openaiKey),
+    llmModel: llmModel ?? DEFAULT_OPENAI_LLM_MODEL,
     async embedText(text: string) {
       if (!geminiKey) throw new Error('embedText: GEMINI_API_KEY missing');
       return embedText(text, {
@@ -45,12 +43,12 @@ export function createDbContext(options: DbContextOptions): PipelineContext {
       });
     },
     async llmChoose(input: LlmChooseInput): Promise<LlmChooseOutput> {
-      if (!geminiKey) {
-        return { chosenId: null, confidence: 0, reasoning: 'GEMINI_API_KEY missing' };
+      if (!openaiKey) {
+        return { chosenId: null, confidence: 0, reasoning: 'OPENAI_API_KEY missing' };
       }
       return chooseWithLlm(input, {
-        apiKey: geminiKey,
-        model: llmModel ?? DEFAULT_GEMINI_LLM_MODEL,
+        apiKey: openaiKey,
+        model: llmModel ?? DEFAULT_OPENAI_LLM_MODEL,
       });
     },
     loadCandidatesByName: (cleaned, brand) => loadCandidatesByName(db, cleaned, brand),
@@ -73,7 +71,8 @@ export function createDbContextFromEnv(db: Db, env: BaseEnv): PipelineContext {
   return createDbContext({
     db,
     geminiKey: env.GEMINI_API_KEY,
-    llmModel: env.GEMINI_LLM_MODEL,
+    openaiKey: env.OPENAI_API_KEY,
+    llmModel: env.OPENAI_LLM_MODEL,
     embeddingModel: env.GEMINI_EMBEDDING_MODEL,
   });
 }

@@ -65,7 +65,7 @@ export function loadCandidatesByName(cleaned: string, brand: string | null): Raw
 }
 
 /**
- * Builds the offline pipeline context: no Gemini key, no database, no cache.
+ * Builds the offline pipeline context: no provider keys, no database, no cache.
  * The vector step short-circuits on `hasEmbeddings: false` and the LLM
  * fallback on `hasLlm: false`, so the harness measures the deterministic
  * path only. Cache reads always miss so each labelled line is scored
