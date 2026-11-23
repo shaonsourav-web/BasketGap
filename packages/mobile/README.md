@@ -2,13 +2,25 @@
 
 The BasketGap iOS/Android app: Expo (SDK 57) + expo-router + TypeScript.
 
-Every screen currently runs against a **deterministic offline mock** of the
-compare engine (`src/mock/`). The mock uses **synthetic sample data**: invented
-products and prices, not taken from any retailer. Nothing here calls
-`/api/match` yet. The API now
-returns matches and retailer offers; connecting it requires comparison logic
-for quantities, missing prices, and comparable totals. Shared types help with
-that integration but do not establish that mock and live behavior are equivalent.
+The default is a **deterministic offline mock** with synthetic sample data.
+To use catalogue offers, start the app with these public settings (example for
+the iOS Simulator with the standalone API on the same Mac):
+
+```bash
+EXPO_PUBLIC_BASKETGAP_LIVE_OFFERS=true \
+EXPO_PUBLIC_BASKETGAP_API_URL=http://localhost:3000 \
+pnpm --filter @basketgap/mobile ios
+```
+
+Start the API separately against a database with imported and enriched offers.
+The API origin is bundled with the app. Keep keys and database credentials on
+the server. A physical device needs an API origin it can reach.
+
+The results display catalogue promotions and the oldest source timestamp
+behind the displayed prices. An explicit leading count multiplies the unit
+offer. Ambiguous pack quantities, member offers and multibuy deals are left
+unpriced. Both totals cover the same lines. An offers service failure stays
+on the list screen with a retry message, and sample results remain labelled.
 
 ## Run it
 

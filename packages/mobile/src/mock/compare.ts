@@ -33,7 +33,9 @@ export interface SplitBasket {
 export interface CompareResult {
   postcode: string;
   /** When the prices behind this result were last refreshed. */
-  pricedAt: Date;
+  pricedAt: Date | null;
+  isSample: boolean;
+  limitedPostcodeCoverage?: boolean;
   lines: ComparedLine[];
   pricedLines: ComparedLine[];
   /**
@@ -59,8 +61,8 @@ export interface CompareResult {
   /** The five lines pushing the totals apart the hardest, biggest gap first. */
   drivers: ComparedLine[];
   split: SplitBasket;
-  productsScanned: number;
-  cataloguesChecked: number;
+  productsScanned: number | null;
+  cataloguesChecked: number | null;
 }
 
 const UNIT_WORDS = new Set([
@@ -91,7 +93,7 @@ const EXPLICIT_SIZE = /\d+\s*(kg|g|ml|l|lt|litres?|pk|pack|doz|dozen)\b/i;
 const cents = (dollars: number): number => Math.round(dollars * 100);
 const dollars = (value: number): number => value / 100;
 
-function extractQuantity(text: string): { quantity: number; rest: string } {
+export function extractQuantity(text: string): { quantity: number; rest: string } {
   const multiplied = text.match(/^(\d+)\s*[x×]\s*/i);
   if (multiplied?.[1]) {
     return { quantity: Number(multiplied[1]), rest: text.slice(multiplied[0].length) };
@@ -177,8 +179,25 @@ function compareLine(raw: string, index: number): ComparedLine {
   const sizeGiven = EXPLICIT_SIZE.test(trimmed);
   const band: ConfidenceBand = entry.band === 'assumed' && sizeGiven ? 'matched' : entry.band;
 
-  const colesCents = entry.coles === null ? null : cents(entry.coles) * quantity;
-  const wooliesCents = entry.woolworths === null ? null : cents(entry.woolworths) * quantity;
+  return priceLine({
+    id,
+    raw: trimmed,
+    quantity,
+    band,
+    productName: entry.name,
+    sizeText: entry.sizeText,
+    assumption: band === 'assumed' ? (entry.assumption ?? null) : null,
+    colesUnit: entry.coles,
+    woolworthsUnit: entry.woolworths,
+  });
+}
+
+export function priceLine(
+  line: Omit<ComparedLine, 'coles' | 'woolworths' | 'cheaper' | 'delta'>,
+): ComparedLine {
+  const { colesUnit, woolworthsUnit, quantity } = line;
+  const colesCents = colesUnit === null ? null : cents(colesUnit) * quantity;
+  const wooliesCents = woolworthsUnit === null ? null : cents(woolworthsUnit) * quantity;
   // Only a line priced at both retailers has a meaningful gap or a cheaper side.
   const gap =
     colesCents !== null && wooliesCents !== null ? Math.abs(colesCents - wooliesCents) : 0;
@@ -190,17 +209,9 @@ function compareLine(raw: string, index: number): ComparedLine {
         : 'woolworths';
 
   return {
-    id,
-    raw: trimmed,
-    quantity,
-    band,
-    productName: entry.name,
-    sizeText: entry.sizeText,
-    assumption: band === 'assumed' ? (entry.assumption ?? null) : null,
+    ...line,
     coles: colesCents === null ? null : dollars(colesCents),
     woolworths: wooliesCents === null ? null : dollars(wooliesCents),
-    colesUnit: entry.coles,
-    woolworthsUnit: entry.woolworths,
     cheaper,
     delta: dollars(gap),
   };
@@ -216,8 +227,7 @@ export function lastRefreshedAt(now: Date = new Date()): Date {
 }
 
 /**
- * Mock stand-in for POST /api/match plus the compare engine. Deterministic and
- * offline — swapping it for the real endpoint should not change any screen.
+ * Deterministic sample comparison for offline mode.
  */
 export function compareBasket(listText: string, postcode: string, now?: Date): CompareResult {
   const lines = listText
@@ -226,14 +236,34 @@ export function compareBasket(listText: string, postcode: string, now?: Date): C
     .filter((line) => line.length > 0)
     .map(compareLine);
 
+  return summarizeBasket(lines, {
+    postcode,
+    pricedAt: lastRefreshedAt(now),
+    isSample: true,
+    productsScanned: CATALOGUE_COVERAGE.productsScanned,
+    cataloguesChecked: CATALOGUE_COVERAGE.cataloguesChecked,
+  });
+}
+
+export function summarizeBasket(
+  lines: ComparedLine[],
+  metadata: Pick<
+    CompareResult,
+    | 'postcode'
+    | 'pricedAt'
+    | 'isSample'
+    | 'productsScanned'
+    | 'cataloguesChecked'
+    | 'limitedPostcodeCoverage'
+  >,
+): CompareResult {
   const pricedLines = lines.filter(
     (line): line is ComparedLine & { coles: number; woolworths: number } =>
       line.coles !== null && line.woolworths !== null,
   );
-  const notOnSpecialLines = lines.filter((line) => line.band === 'needs_attention');
+  const notOnSpecialLines = lines.filter((line) => line.coles === null && line.woolworths === null);
   const singlePriceLines = lines.filter(
-    (line) =>
-      line.band !== 'needs_attention' && (line.coles === null) !== (line.woolworths === null),
+    (line) => (line.coles === null) !== (line.woolworths === null),
   );
 
   const colesCents = pricedLines.reduce((sum, line) => sum + cents(line.coles), 0);
@@ -257,8 +287,7 @@ export function compareBasket(listText: string, postcode: string, now?: Date): C
   ).length;
 
   return {
-    postcode,
-    pricedAt: lastRefreshedAt(now),
+    ...metadata,
     lines,
     pricedLines,
     notOnSpecialLines,
@@ -276,7 +305,5 @@ export function compareBasket(listText: string, postcode: string, now?: Date): C
       colesLineCount,
       woolworthsLineCount: pricedLines.length - colesLineCount,
     },
-    productsScanned: CATALOGUE_COVERAGE.productsScanned,
-    cataloguesChecked: CATALOGUE_COVERAGE.cataloguesChecked,
   };
 }

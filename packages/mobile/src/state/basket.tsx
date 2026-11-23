@@ -10,6 +10,7 @@ import {
 } from 'react';
 
 import { compareBasket, type CompareResult } from '@/mock/compare';
+import { compareWithApi, liveOffersEnabled } from '@/compare-api';
 
 const POSTCODE_KEY = 'basketgap.postcode';
 
@@ -21,7 +22,11 @@ interface BasketState {
   listText: string;
   setListText: (text: string) => void;
   result: CompareResult | null;
-  runCompare: (override?: { listText?: string; postcode?: string }) => CompareResult;
+  runCompare: (override?: {
+    listText?: string;
+    postcode?: string;
+    signal?: AbortSignal;
+  }) => Promise<CompareResult>;
   unmatchedDismissed: boolean;
   dismissUnmatched: () => void;
 }
@@ -65,9 +70,14 @@ export function BasketProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const runCompare = useCallback(
-    (override?: { listText?: string; postcode?: string }) => {
+    async (override?: { listText?: string; postcode?: string; signal?: AbortSignal }) => {
+      const text = override?.listText ?? listText;
+      const area = override?.postcode ?? postcode;
+      const next = liveOffersEnabled
+        ? await compareWithApi(text, area, override?.signal)
+        : compareBasket(text, area);
+      if (override?.signal?.aborted) return next;
       setUnmatchedDismissed(false);
-      const next = compareBasket(override?.listText ?? listText, override?.postcode ?? postcode);
       setResult(next);
       return next;
     },

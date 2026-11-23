@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -11,6 +12,7 @@ import {
 } from 'react-native';
 
 import { PostcodeChip } from '@/components/chips';
+import { liveOffersEnabled } from '@/compare-api';
 import { PrimaryButton } from '@/components/controls';
 import { Screen, ScreenHeader } from '@/components/screen';
 import { plural } from '@/format';
@@ -21,12 +23,32 @@ import { fonts, palette, radius, space, type } from '@/theme';
 export default function ListScreen() {
   const router = useRouter();
   const { postcode, listText, setListText, runCompare } = useBasket();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const request = useRef<AbortController | null>(null);
+  useEffect(() => () => request.current?.abort(), []);
 
   const itemCount = listText.split('\n').filter((line) => line.trim().length > 0).length;
 
   const onCompare = () => {
-    runCompare();
-    router.push('/results');
+    if (request.current) return;
+    const controller = new AbortController();
+    request.current = controller;
+    setPending(true);
+    setError(null);
+    void runCompare({ signal: controller.signal })
+      .then(() => {
+        if (!controller.signal.aborted) router.push('/results');
+      })
+      .catch((err: unknown) => {
+        if (!controller.signal.aborted) {
+          setError(err instanceof Error ? err.message : 'Could not compare prices.');
+        }
+      })
+      .finally(() => {
+        request.current = null;
+        if (!controller.signal.aborted) setPending(false);
+      });
   };
 
   return (
@@ -48,39 +70,42 @@ export default function ListScreen() {
           </Text>
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.scenarios}
-          style={styles.scenariosRow}
-        >
-          {BASKET_SCENARIOS.map((scenario) => {
-            const active = listText === scenario.list;
-            return (
-              <Pressable
-                key={scenario.target}
-                onPress={() => setListText(scenario.list)}
-                accessibilityRole="button"
-                accessibilityLabel={`Load ${scenario.label} sample list, ${scenario.blurb}`}
-                style={({ pressed }) => [
-                  styles.scenarioChip,
-                  active && styles.scenarioChipActive,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <Text style={[styles.scenarioLabel, active && styles.scenarioLabelActive]}>
-                  {scenario.label}
-                </Text>
-                <Text style={[styles.scenarioBlurb, active && styles.scenarioBlurbActive]}>
-                  {scenario.blurb}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        {liveOffersEnabled ? null : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.scenarios}
+            style={styles.scenariosRow}
+          >
+            {BASKET_SCENARIOS.map((scenario) => {
+              const active = listText === scenario.list;
+              return (
+                <Pressable
+                  key={scenario.target}
+                  onPress={() => setListText(scenario.list)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Load ${scenario.label} sample list, ${scenario.blurb}`}
+                  style={({ pressed }) => [
+                    styles.scenarioChip,
+                    active && styles.scenarioChipActive,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={[styles.scenarioLabel, active && styles.scenarioLabelActive]}>
+                    {scenario.label}
+                  </Text>
+                  <Text style={[styles.scenarioBlurb, active && styles.scenarioBlurbActive]}>
+                    {scenario.blurb}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        )}
 
         <TextInput
           value={listText}
+          editable={!pending}
           onChangeText={setListText}
           multiline
           autoCapitalize="none"
@@ -95,12 +120,14 @@ export default function ListScreen() {
 
         <View style={styles.footer}>
           <PrimaryButton
-            label="Compare"
+            label={pending ? 'Comparing…' : 'Compare'}
             hint={itemCount > 0 ? plural(itemCount, 'item') : undefined}
-            disabled={itemCount === 0}
+            disabled={itemCount === 0 || pending}
             onPress={onCompare}
           />
-          <Text style={styles.quiet}>Nothing happens until you tap Compare.</Text>
+          <Text style={styles.quiet} accessibilityLiveRegion="polite">
+            {error ?? 'Nothing happens until you tap Compare.'}
+          </Text>
         </View>
       </KeyboardAvoidingView>
     </Screen>

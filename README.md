@@ -7,7 +7,7 @@ BasketGap is a free grocery list comparison app for Australia. You type or paste
 Early development. It is not a finished product.
 
 - The matching engine, the ingestion workers, and the API are built and pass their checks locally.
-- The mobile app (`packages/mobile`) runs in the iOS Simulator, but every figure it shows comes from a built-in offline mock. It is not connected to the API yet.
+- The mobile app defaults to synthetic offline data. An opt-in mode reads catalogue offers from `POST /api/match`. The local integration test uses synthetic offers and the real keyless match route.
 - Production readiness has not been established. No live deployment has been verified.
 - Prices come from weekly catalogue promotions only. They are not full shelf prices, and not every product has a promotion.
 
@@ -131,9 +131,9 @@ Matching engine shipped — `workers match --line "<text>" | --list <file>|-`, `
 
 The shared matching package, Hono API package, and Vercel adapter are built and green locally. `POST /api/match` accepts 1–100 shopping-list lines, applies request IDs, body limits, rate limiting, CORS, per-request LLM caps, and returns match metadata. Run it with `pnpm --filter @basketgap/api dev` (Vercel) or `pnpm --filter @basketgap/api dev:node` (standalone Node). The offline eval harness currently scores **99.5% overall accuracy on 200 labelled lines**, with one documented false negative; run it with `pnpm --filter @basketgap/shared test:eval`. The real accuracy gate is the three independent blind gold sets in `packages/shared/src/matching/__tests__/eval/blind/` — **0 wrong picks** across all three; run one with `pnpm exec tsx scripts/blind-eval.ts <set>` from `packages/shared`. A local browser playground is available through `pnpm --filter @basketgap/shared playground`.
 
-The mobile app shell is up — `packages/mobile`, Expo SDK 57 + expo-router + TypeScript, six screens covering the whole guest flow: postcode → Notes-style list → dual totals with the factual difference and top 5 drivers → all items with confidence bands → split basket → a dismissible prompt for lines that couldn't be priced. It runs in the iOS Simulator today with `pnpm --filter @basketgap/mobile ios`. Every figure on screen comes from a deterministic offline mock in `src/mock/`. The API now returns retailer offers, but the mobile comparison flow is not connected to it yet. Shared types help integration; quantity handling, comparable totals, and missing-price behavior still need end-to-end verification. See [packages/mobile/README.md](./packages/mobile/README.md).
+The mobile app (`packages/mobile`) has six guest screens and defaults to a deterministic offline mock. Set `EXPO_PUBLIC_BASKETGAP_LIVE_OFFERS=true` and `EXPO_PUBLIC_BASKETGAP_API_URL` to the API origin to opt into catalogue offers. Both modes compare only lines with prices at both stores. See [packages/mobile/README.md](./packages/mobile/README.md).
 
-Production readiness is **not established by the local checks**. The API returns Coles/Woolworths offers and resolves postcode to state; production rate limiting fails closed. The remaining product boundary is the mobile-to-API comparison flow, including honest handling of missing and stale prices. Current live data and deployment state must be verified before launch. See [workspace cleanup review](./docs/workspace-cleanup-plan.md).
+Before launch, verify the mobile comparison on a device with freshly imported data and check production rate limiting and deployment configuration. See [workspace cleanup review](./docs/workspace-cleanup-plan.md).
 
 ## Documentation
 

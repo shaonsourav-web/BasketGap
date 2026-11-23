@@ -32,7 +32,7 @@ export interface ProductOffers {
 }
 
 export interface LoadOffersOptions {
-  /** AU state filter; offers tagged with another state are excluded. */
+  /** AU state filter. Without a state, only offers without a state restriction qualify. */
   state?: string | null;
   /** Clock override for tests. Defaults to `new Date()`. */
   now?: Date;

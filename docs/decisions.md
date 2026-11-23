@@ -1,5 +1,15 @@
 # Decisions Log
 
+## 2026-11-23 — Opt-in mobile catalogue offers
+
+- Expo bundles a public mode flag and API origin. Offline sample data remains
+  the default. Live errors stay visible and never fall back to sample prices.
+- The app sends product text separately from supported leading counts of up to
+  24 units and sums in integer cents. Ambiguous quantities and conditional
+  offers are left unpriced. Both totals use only lines priced at both stores.
+- A comparison shows the oldest import timestamp among the offers displayed.
+  An unresolved postcode limits the API to offers without a state restriction.
+
 ## 2026-05-11
 
 - Name: BasketGap (one word, no space)

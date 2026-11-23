@@ -25,10 +25,9 @@ export default function AllItemsScreen() {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.summary}>
-          {plural(matched, 'line')} with a clear match and {assumed} where we assumed a size.{' '}
+          {plural(matched, 'line')} with a clear match and {assumed} with an assumed match.{' '}
           {singleStore} had a special at one store only and {notOnSpecial} had none listed. Totals
-          only cover items with a listed price at both stores, so those lines are left out of both —
-          that isn&apos;t a miss, they just aren&apos;t discounted at both.
+          only cover items with a listed price at both stores.
         </Text>
 
         <View style={styles.card}>

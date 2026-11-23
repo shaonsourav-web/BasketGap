@@ -1,5 +1,5 @@
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { BASKET_SCENARIOS } from '@/mock/catalogue';
@@ -13,11 +13,12 @@ import { fonts, palette, space } from '@/theme';
 export default function QaLiveScreen() {
   const router = useRouter();
   const { budget } = useLocalSearchParams<{ budget?: string }>();
-  const { setPostcode, setListText, runCompare, result } = useBasket();
+  const { setPostcode, setListText, runCompare } = useBasket();
   const prepared = useRef(false);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    if (prepared.current) return;
+    if (!__DEV__ || prepared.current) return;
     prepared.current = true;
 
     const target = Number(budget ?? '150') as 50 | 100 | 150 | 200 | 250 | 300;
@@ -27,19 +28,19 @@ export default function QaLiveScreen() {
 
     setPostcode('3121');
     setListText(scenario.list);
-    runCompare({ listText: scenario.list, postcode: '3121' });
-  }, [budget, runCompare, setListText, setPostcode]);
-
-  useEffect(() => {
-    if (result) router.replace('/results');
-  }, [result, router]);
+    void runCompare({ listText: scenario.list, postcode: '3121' })
+      .then(() => router.replace('/results'))
+      .catch(() => setFailed(true));
+  }, [budget, router, runCompare, setListText, setPostcode]);
 
   if (!__DEV__) return <Redirect href="/" />;
 
   return (
     <View style={styles.wrap}>
       <ActivityIndicator color={palette.accent} />
-      <Text style={styles.label}>Loading ${budget ?? '150'} sample compare…</Text>
+      <Text style={styles.label}>
+        {failed ? 'Could not compare prices.' : 'Comparing sample basket…'}
+      </Text>
     </View>
   );
 }

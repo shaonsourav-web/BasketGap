@@ -82,7 +82,7 @@ export async function loadOffersForCanonicalIds(
         or (s.valid_to is null
             and c.fetched_at >= ${today}::date - make_interval(days => ${OFFER_MAX_AGE_DAYS}))
       )
-      and (${state}::text is null or s.state is null or s.state = ${state}::text)
+      and (s.state is null or s.state = ${state}::text)
     order by rs.canonical_product_id, s.retailer, s.special_price asc, c.fetched_at desc
   `);
 
@@ -124,6 +124,6 @@ function mapOffer(row: OfferRow, retailer: Retailer): RetailerOffer {
     state: row.state,
     sourceLabel: row.source_label,
     validTo: row.valid_to,
-    fetchedAt: row.fetched_at,
+    fetchedAt: new Date(row.fetched_at).toISOString(),
   };
 }

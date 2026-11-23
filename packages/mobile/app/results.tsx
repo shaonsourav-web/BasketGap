@@ -5,7 +5,6 @@ import { PostcodeChip, RetailerChip, RETAILER_COLOUR } from '@/components/chips'
 import { ActionRow } from '@/components/controls';
 import { Screen, ScreenHeader, SectionLabel } from '@/components/screen';
 import { freshness, money, plural, retailerName } from '@/format';
-import { CATALOGUE_COVERAGE } from '@/mock/catalogue';
 import type { ComparedLine } from '@/mock/compare';
 import { useBasket } from '@/state/basket';
 import { fonts, palette, radius, space, type } from '@/theme';
@@ -39,24 +38,29 @@ export default function ResultsScreen() {
       />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {CATALOGUE_COVERAGE.isSample ? null : (
-          <Text style={styles.freshness}>{freshness(result.pricedAt)}</Text>
+        {result.isSample ? null : (
+          <Text style={styles.freshness}>
+            {result.pricedAt ? freshness(result.pricedAt) : 'No catalogue price update to show'}
+          </Text>
         )}
 
         <View style={styles.totals}>
-          <TotalColumn retailer="coles" total={colesTotal} />
+          <TotalColumn retailer="coles" total={pricedCount ? colesTotal : null} />
           <View style={styles.totalsDivider} />
-          <TotalColumn retailer="woolworths" total={woolworthsTotal} />
+          <TotalColumn retailer="woolworths" total={pricedCount ? woolworthsTotal : null} />
         </View>
 
         <View style={styles.disclosure} accessibilityRole="summary">
           <Text style={styles.disclosureText}>
-            {CATALOGUE_COVERAGE.isSample ? (
+            {result.isSample ? (
               <Text style={styles.disclosureStrong}>Sample data, not real prices. </Text>
             ) : null}
             Compares Coles and Woolworths using published catalogue promotions only. Totals cover
             only items with a listed price at both stores. Where a store has no special listed, the
             item shows &ldquo;No special listed&rdquo; and is left out of both totals.
+            {result.limitedPostcodeCoverage
+              ? ' We could not resolve your postcode, so only offers without a state restriction are shown.'
+              : ''}
           </Text>
         </View>
 
@@ -97,26 +101,34 @@ export default function ResultsScreen() {
             detail={`${plural(pricedCount, 'line')} with a listed price at both stores`}
             onPress={() => router.push('/all-items')}
           />
-          <ActionRow
-            label="Split the basket"
-            detail={
-              split.savingVsBestSingle > 0
-                ? `Shopping both stores comes to ${money(split.total)}`
-                : 'One store is already the cheaper way to shop'
-            }
-            onPress={() => router.push('/split')}
-          />
+          {pricedCount > 0 ? (
+            <ActionRow
+              label="Split the basket"
+              detail={
+                split.savingVsBestSingle > 0
+                  ? `Shopping both stores comes to ${money(split.total)}`
+                  : 'One store is already the cheaper way to shop'
+              }
+              onPress={() => router.push('/split')}
+            />
+          ) : null}
         </View>
       </ScrollView>
     </Screen>
   );
 }
 
-function TotalColumn({ retailer, total }: { retailer: 'coles' | 'woolworths'; total: number }) {
+function TotalColumn({
+  retailer,
+  total,
+}: {
+  retailer: 'coles' | 'woolworths';
+  total: number | null;
+}) {
   return (
     <View style={styles.totalColumn}>
       <RetailerChip retailer={retailer} />
-      <Text style={styles.totalAmount}>{money(total)}</Text>
+      <Text style={styles.totalAmount}>{total === null ? '—' : money(total)}</Text>
     </View>
   );
 }

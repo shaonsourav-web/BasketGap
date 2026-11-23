@@ -22,7 +22,19 @@ export function timeOfDay(date: Date): string {
 export function freshness(pricedAt: Date, now: Date = new Date()): string {
   const startOfToday = new Date(now);
   startOfToday.setHours(0, 0, 0, 0);
-  const day = pricedAt.getTime() >= startOfToday.getTime() ? 'today' : 'yesterday';
+  const startOfYesterday = new Date(startOfToday);
+  startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+  const day =
+    pricedAt.toDateString() === now.toDateString()
+      ? 'today'
+      : pricedAt.toDateString() === startOfYesterday.toDateString()
+        ? 'yesterday'
+        : new Intl.DateTimeFormat('en-AU', {
+            weekday: 'short',
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+          }).format(pricedAt);
   return `Prices as of ${timeOfDay(pricedAt)} ${day}`;
 }
 

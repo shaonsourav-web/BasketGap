@@ -79,9 +79,11 @@ export function createMatchRoute(deps: MatchRouteDeps): Hono<{ Variables: ApiVar
       // a shopper still gets their matched list when the offers query is down.
       let offersById = new Map<string, ProductOffers>();
       let offersAvailable = true;
+      let postcodeResolved: boolean | null = null;
       if (matchedIds.length > 0) {
         try {
           const state = postcode ? await deps.resolveState(postcode) : null;
+          if (postcode) postcodeResolved = state !== null;
           offersById = await deps.loadOffers(matchedIds, state);
         } catch (err) {
           offersAvailable = false;
@@ -123,6 +125,7 @@ export function createMatchRoute(deps: MatchRouteDeps): Hono<{ Variables: ApiVar
           llm_cap_reached: cappedCtx.llmCapReached(),
           on_special: onSpecial,
           offers_available: offersAvailable,
+          postcode_resolved: postcodeResolved,
           latency_ms: Math.round(performance.now() - t0),
           request_id: requestId,
         },

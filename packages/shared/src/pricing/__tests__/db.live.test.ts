@@ -160,6 +160,11 @@ describeIfDb('pricing live DB semantics', () => {
     expect(offers.get(PRODUCT_ID)?.coles?.specialPrice).toBe(5.5);
   });
 
+  it('uses only offers without a state restriction when no state is known', async () => {
+    const offers = await loadOffersForCanonicalIds(db, [PRODUCT_ID]);
+    expect(offers.get(PRODUCT_ID)?.coles?.specialPrice).toBe(5.5);
+  });
+
   it('resolves postcode to state via zones', async () => {
     expect(await resolveStateForPostcode(db, TEST_POSTCODE)).toBe('NT');
     expect(await resolveStateForPostcode(db, '0000')).toBeNull();

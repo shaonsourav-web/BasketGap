@@ -142,6 +142,8 @@ The mobile app runs on an offline mock with invented data, so these tasks need o
 
 ### 10. Fix `freshness()` calling old prices "yesterday"
 
+**Status:** Fixed as part of mobile offers integration. Pick another starter issue.
+
 **Where:** `freshness` in `packages/mobile/src/format.ts`, used by `packages/mobile/app/results.tsx`; add assertions to `packages/mobile/src/mock/verify-mock.ts` (the package's test script).
 
 **Observed:** the function returns "Prices as of 6:15 am today" for anything from today and "yesterday" for **everything else**, including prices that are days or weeks old. The app commits to honest disclosure of when prices were last updated, and real weekly catalogue data will often be older than a day.
