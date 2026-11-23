@@ -27,7 +27,7 @@ export function withLlmCap(ctx: PipelineContext, maxCalls: number): LlmCappedCon
 
   const llmChoose = async (input: LlmChooseInput): Promise<LlmChooseOutput> => {
     if (callsMade >= maxCalls) {
-      return { chosenId: null, confidence: 0, reasoning: 'llm-cap-reached' };
+      return { chosenId: null, confidence: 0, reasoning: '', skipped: 'llm-cap-reached' };
     }
     callsMade += 1;
     return ctx.llmChoose(input);

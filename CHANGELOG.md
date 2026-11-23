@@ -27,12 +27,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- The match API marks only lines whose LLM call was skipped by the request cap. Its call count includes provider declines.
 - Mobile catalogue freshness shows calendar dates for older updates.
 - Unresolved postcodes use only offers without a state restriction.
 
 ### Known issues
 
-- Per-line LLM truncation reporting in `POST /api/match` is imprecise: a declined line can be flagged `truncated` when the request-wide LLM cap was reached later in the same request.
 - `.5L`-style sizes, "half dozen" and an attached `mls` unit are mis-parsed or not parsed. See `docs/GOOD_FIRST_ISSUES.md` for reproductions.
 - `docs/ios-approval-and-security.md` still refers to OpenRouter in several places.
 

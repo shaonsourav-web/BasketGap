@@ -76,6 +76,8 @@ export interface LlmChooseOutput {
   chosenId: string | null;
   confidence: number;
   reasoning: string;
+  /** Set by the request cap when the provider was never called. */
+  skipped?: 'llm-cap-reached';
 }
 
 export interface CachedMatch {

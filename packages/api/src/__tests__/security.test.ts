@@ -1,5 +1,5 @@
 import { matchBasket } from '@basketgap/shared/matching/pipeline';
-import type { LlmChooseInput, MatchResult } from '@basketgap/shared/matching/types';
+import type { MatchResult, PipelineContext } from '@basketgap/shared/matching/types';
 import { Hono } from 'hono';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -288,33 +288,46 @@ describe('client IP derivation', () => {
 });
 
 describe('LLM cap', () => {
-  it('truncates LLM calls past MAX_LLM_CALLS_PER_REQUEST and marks results', async () => {
-    mockedMatchBasket.mockImplementationOnce(async (lines, ctx) => {
-      const out: MatchResult[] = [];
-      for (const line of lines) {
-        const llm = await ctx.llmChoose({} as LlmChooseInput);
-        out.push({
-          raw: line,
-          cleaned: line,
-          cleanedInputHash: 'h',
-          band: llm.chosenId ? 'matched' : 'needs_attention',
-          decidedBy: llm.chosenId ? 'llm' : 'rank',
-          canonicalProductId: llm.chosenId,
-          top: null,
-          alternatives: [],
-          audit: [
-            { step: 'llm-fallback', durationMs: 5, notes: '' },
-            { step: 'total', durationMs: 6, notes: '' },
-          ],
-        });
-      }
-      return out;
+  it('marks only the lines denied an LLM call, even after a provider decline', async () => {
+    const real = await vi.importActual<{ matchBasket: typeof matchBasket }>(
+      '@basketgap/shared/matching/pipeline',
+    );
+    const { getMatchingContext } = await import('../lib/infra.ts');
+    const llmChoose = vi.fn<PipelineContext['llmChoose']>(async () => ({
+      chosenId: 'cid',
+      confidence: 0.9,
+      reasoning: '',
+    }));
+    llmChoose.mockResolvedValueOnce({ chosenId: null, confidence: 0, reasoning: '' });
+    vi.mocked(getMatchingContext).mockReturnValueOnce({
+      ...getMatchingContext(),
+      hasLlm: true,
+      llmChoose,
+      readCache: async () => null,
+      loadCandidatesByName: async (query) =>
+        query === 'unknownword'
+          ? []
+          : [
+              {
+                id: 'cid',
+                name: 'Sample Product',
+                brand: null,
+                category: null,
+                unitSizeValue: null,
+                unitSizeUom: null,
+                textSimilarity: 0.4,
+              },
+            ],
+      writeCache: async () => {},
     });
+    mockedMatchBasket.mockImplementationOnce(real.matchBasket);
 
     const res = await app.request('/api/match', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ lines: ['a', 'b', 'c', 'd'] }),
+      body: JSON.stringify({
+        lines: ['sample alpha', 'sample beta', 'unknownword', 'sample gamma'],
+      }),
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
@@ -323,9 +336,7 @@ describe('LLM cap', () => {
     };
     expect(body.stats.llm_cap_reached).toBe(true);
     expect(body.stats.llm_calls).toBe(2);
-    expect(body.results[0]?.truncated).toBe(false);
-    expect(body.results[1]?.truncated).toBe(false);
-    expect(body.results[2]?.truncated).toBe(true);
-    expect(body.results[3]?.truncated).toBe(true);
+    expect(llmChoose).toHaveBeenCalledTimes(2);
+    expect(body.results.map((line) => line.truncated)).toEqual([false, false, false, true]);
   });
 });

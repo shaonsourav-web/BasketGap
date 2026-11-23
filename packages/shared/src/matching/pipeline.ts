@@ -97,8 +97,11 @@ export async function matchLine(raw: string, ctx: PipelineContext): Promise<Matc
   let decidedBy: DecidedBy = top ? (direct.length > 0 ? 'direct' : 'rank') : 'none';
 
   if ((top?.finalScore ?? 0) < BAND_THRESHOLDS.assumed) {
-    const llm = await stepAuditAsync(audit, 'llm-fallback', () =>
-      llmFallback(cleanedForMatch, ranked, ctx),
+    const llm = await stepAuditAsync(
+      audit,
+      'llm-fallback',
+      () => llmFallback(cleanedForMatch, ranked, ctx),
+      (out) => out?.skipped ?? '',
     );
     if (llm?.chosenId) {
       const chosen = ranked.find((c) => c.canonicalProductId === llm.chosenId);
@@ -175,10 +178,15 @@ async function stepAuditAsync<T>(
   audit: MatchAuditEntry[],
   step: string,
   fn: () => Promise<T>,
+  notesFor?: (out: T) => string,
 ): Promise<T> {
   const t0 = performance.now();
   const out = await fn();
-  audit.push({ step, durationMs: Math.round(performance.now() - t0), notes: '' });
+  audit.push({
+    step,
+    durationMs: Math.round(performance.now() - t0),
+    notes: notesFor?.(out) ?? '',
+  });
   return out;
 }
 

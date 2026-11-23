@@ -89,7 +89,7 @@ describe('POST /api/match — happy path', () => {
     expect(body.stats.request_id.length).toBeGreaterThan(10);
   });
 
-  it('counts cache hits and llm calls in stats', async () => {
+  it('counts cache hits without inferring provider calls from the result', async () => {
     mockedMatchBasket.mockResolvedValueOnce([
       fakeResult({ decidedBy: 'cache' }),
       fakeResult({
@@ -110,7 +110,7 @@ describe('POST /api/match — happy path', () => {
       stats: { cached: number; llm_calls: number };
     };
     expect(body.stats.cached).toBe(1);
-    expect(body.stats.llm_calls).toBe(1);
+    expect(body.stats.llm_calls).toBe(0);
   });
 });
 

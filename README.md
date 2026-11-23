@@ -7,6 +7,7 @@ BasketGap is a free grocery list comparison app for Australia. You type or paste
 Early development. It is not a finished product.
 
 - The matching engine, the ingestion workers, and the API are built and pass their checks locally.
+- The match API distinguishes lines skipped by the optional LLM call cap from provider declines.
 - The mobile app defaults to synthetic offline data. An opt-in mode reads catalogue offers from `POST /api/match`. The local integration test uses synthetic offers and the real keyless match route.
 - Production readiness has not been established. No live deployment has been verified.
 - Prices come from weekly catalogue promotions only. They are not full shelf prices, and not every product has a promotion.

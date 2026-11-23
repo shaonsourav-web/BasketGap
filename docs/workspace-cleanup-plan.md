@@ -7,7 +7,8 @@ The product goal is a trustworthy comparison of a shopper's list using available
 The remaining work should be ordered by customer impact:
 
 1. Verify one complete basket on a device against freshly imported data before claiming production readiness. Use the public file import and enrichment commands.
-2. Correct per-line LLM truncation reporting: reaching the basket-wide cap does not prove an earlier declined match was truncated.
+
+Per-line LLM truncation reporting now records whether the cap blocked the call for that line. The API regression test covers a provider decline, a line without candidates, and a call denied by the cap in the same request.
 
 Batching, vector-search shortcuts, new size abstractions, and another enrichment cron are not established launch requirements. Add them only when measured latency, repeated complexity, or a demonstrated freshness gap justifies them.
 

@@ -100,17 +100,12 @@ export function createMatchRoute(deps: MatchRouteDeps): Hono<{ Variables: ApiVar
       }
 
       let cached = 0;
-      let llmCalls = 0;
       let onSpecial = 0;
       const annotated: MatchResultWithTruncation[] = results.map((r) => {
         if (r.decidedBy === 'cache') cached++;
-        const hasLlmFallback = r.audit.some((a) => a.step === 'llm-fallback');
-        if (hasLlmFallback && r.decidedBy === 'llm') llmCalls++;
-        const truncated =
-          hasLlmFallback &&
-          r.decidedBy !== 'llm' &&
-          r.band === 'needs_attention' &&
-          cappedCtx.llmCapReached();
+        const truncated = r.audit.some(
+          (entry) => entry.step === 'llm-fallback' && entry.notes === 'llm-cap-reached',
+        );
         const offers =
           r.canonicalProductId != null ? (offersById.get(r.canonicalProductId) ?? null) : null;
         if (offers && (offers.coles || offers.woolworths)) onSpecial++;
@@ -121,7 +116,7 @@ export function createMatchRoute(deps: MatchRouteDeps): Hono<{ Variables: ApiVar
         results: annotated,
         stats: {
           cached,
-          llm_calls: llmCalls,
+          llm_calls: cappedCtx.llmCallsMade(),
           llm_cap_reached: cappedCtx.llmCapReached(),
           on_special: onSpecial,
           offers_available: offersAvailable,

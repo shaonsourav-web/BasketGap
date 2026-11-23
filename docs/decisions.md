@@ -1,5 +1,12 @@
 # Decisions Log
 
+## 2026-11-23 — Per-line LLM cap reporting
+
+- The cap records a skip on the line whose eligible call it blocks. The API
+  uses that line's audit entry for `truncated`, and counts calls at the
+  provider boundary so declines count and blocked calls do not. The
+  request-wide cap and the deterministic matching rules stay the same.
+
 ## 2026-11-23 — Opt-in mobile catalogue offers
 
 - Expo bundles a public mode flag and API origin. Offline sample data remains
